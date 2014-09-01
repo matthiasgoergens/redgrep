@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs,StandaloneDeriving #-}
 import Data.List
 
 -- Add character classes later.
@@ -11,6 +12,22 @@ data Re a
     | Eps
     | Nil
     deriving (Show, Eq, Ord)
+
+data ReX a x where
+    SymX :: Maybe [a] -> ReX a a
+    AltX :: ReX a x -> ReX a y -> ReX a (Either x y)
+    CutX :: ReX a x -> ReX a y -> ReX a (x,y)
+    SeqX :: ReX a x -> ReX a y -> ReX a (x,y)
+    RepX :: ReX a x -> ReX a [x]
+    NotX :: ReX a x -> ReX a ()
+    EpsX :: ReX a ()
+    NilX :: ReX a ()
+
+-- deriving instance Show (ReX a x)
+-- deriving instance Eq (ReX a x)
+-- deriving instance Ord (ReX a x)
+
+
 
 show' :: Re Char -> String
 show' re = case re of
@@ -29,6 +46,9 @@ show' re = case re of
 v :: Re a -> Re b
 v a = if n a then Eps else Nil
 
+vx :: ReX b x -> ReX b ()
+vx a = if nx a then EpsX else NilX
+
 n :: Re a -> Bool
 n (Sym _) = False
 n (Alt a b) = n a || n b
@@ -38,6 +58,16 @@ n (Rep _) = True
 n (Not a) = not (n a) -- not convinced.
 n Eps = True
 n Nil = False
+
+nx :: ReX a x -> Bool
+nx (SymX _) = False
+nx (AltX a b) = nx a || nx b
+nx (CutX a b) = nx a && nx b
+nx (SeqX a b) = nx a && nx b
+nx (RepX _) = True
+nx (NotX a) = not (nx a)
+nx EpsX = True
+nx NilX = True
 
 simplify1 :: Eq a => Re a -> Re a
 simplify1 re = case re of
