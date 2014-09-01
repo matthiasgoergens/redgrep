@@ -1,35 +1,23 @@
-{-# LANGUAGE GADTs,StandaloneDeriving #-}
+{-# LANGUAGE GADTs,StandaloneDeriving,TupleSections #-}
 import Data.List
 
 -- Add character classes later.
-data Re a
-    = Sym (Maybe [a])
-    | Alt (Re a) (Re a)
-    | Cut (Re a) (Re a)
-    | Seq (Re a) (Re a)
-    | Rep (Re a)
-    | Not (Re a)
-    | Eps
-    | Nil
-    deriving (Show, Eq, Ord)
-
-data ReX a x where
-    SymX :: Maybe [a] -> ReX a a
-    AltX :: ReX a x -> ReX a y -> ReX a (Either x y)
-    CutX :: ReX a x -> ReX a y -> ReX a (x,y)
-    SeqX :: ReX a x -> ReX a y -> ReX a (x,y)
-    RepX :: ReX a x -> ReX a [x]
-    NotX :: ReX a x -> ReX a ()
-    EpsX :: ReX a ()
-    NilX :: ReX a ()
+data Re a x where
+    Sym :: Maybe [a] -> Re a a
+    Alt :: Re a x -> Re a y -> Re a (Either x y)
+    Cut :: Re a x -> Re a y -> Re a (x,y)
+    Seq :: Re a x -> Re a y -> Re a (x,y)
+    Rep :: Re a x -> Re a [x]
+    Not :: Re a x -> Re a ()
+    Eps :: Re a ()
+    Nil :: Re a x
+    FMap :: (x -> y) -> Re a x -> Re a y
 
 -- deriving instance Show (ReX a x)
 -- deriving instance Eq (ReX a x)
 -- deriving instance Ord (ReX a x)
 
-
-
-show' :: Re Char -> String
+show' :: Re Char x -> String
 show' re = case re of
     Sym Nothing -> "."
     Sym (Just [x]) -> x:[]
@@ -43,13 +31,10 @@ show' re = case re of
     Nil -> "∅"
 
 -- nullable?
-v :: Re a -> Re b
+v :: Re b x -> Re b ()
 v a = if n a then Eps else Nil
 
-vx :: ReX b x -> ReX b ()
-vx a = if nx a then EpsX else NilX
-
-n :: Re a -> Bool
+n :: Re a x -> Bool
 n (Sym _) = False
 n (Alt a b) = n a || n b
 n (Cut a b) = n a && n b
@@ -59,44 +44,40 @@ n (Not a) = not (n a) -- not convinced.
 n Eps = True
 n Nil = False
 
-nx :: ReX a x -> Bool
-nx (SymX _) = False
-nx (AltX a b) = nx a || nx b
-nx (CutX a b) = nx a && nx b
-nx (SeqX a b) = nx a && nx b
-nx (RepX _) = True
-nx (NotX a) = not (nx a)
-nx EpsX = True
-nx NilX = True
-
-simplify1 :: Eq a => Re a -> Re a
+-- simplify1 :: Eq a => Re a x -> Re a x
 simplify1 re = case re of
-    Alt Nil x -> x
-    Alt x Nil -> x
+    Alt Nil x -> FMap Right x
+    Alt x Nil -> FMap Left x
     Cut Nil x -> Nil
     Cut x Nil -> Nil
-    Cut (Not Nil) x -> x
-    Cut x (Not Nil) -> x
-    Seq Eps x -> x
-    Seq x Eps -> x
+    Cut (Not Nil) x -> FMap ((),) x
+    Cut x (Not Nil) -> FMap (,()) x
+    Seq Eps x -> FMap ((),) x
+    Seq x Eps -> FMap (,()) x
     Seq Nil x -> Nil
     Seq x Nil -> Nil
-    Rep Nil -> Eps
-    Rep Eps -> Eps
-    Rep (Rep a) -> Rep a
+    Rep Nil -> FMap (const []) Eps
+    Rep Eps -> FMap (:[]) Eps
+    -- We've got a choice here!
+    Rep (Rep a) -> FMap (:[]) $ Rep a
+    -- Rep (Rep a) -> Rep $ FMap (:[]) a
+
+    -- -- TODO: Figure out the type magic here.
     -- This can be pretty inefficient.
-    Seq (Rep a) (Rep b) | a == b -> Rep a
-    Not (Not x) -> x
+    -- Seq (Rep a) (Rep b) | _ a == b -> FMap (const ([],[])) $ Rep a
+    -- Seq (Rep a) (Rep b) -> FMap (const ([],[])) $ Rep a
+    Not (Not x) -> FMap (const ()) x
     -- catch all:
     x -> x
 simplify = foldRe1 simplify1
 
-type C2 a = Re a -> Re a -> Re a
-type C1 a = Re a -> Re a
-foldRe1 :: C1 a -> C1 a 
+-- type C2 a = Re a x -> Re a -> Re a
+-- type C1 a = Re a -> Re a
+-- foldRe1 :: C1 a -> C1 a 
+-- -- Needs more typing magic!
 foldRe1 s =
     let f re = s $ case re of
-            re@(Sym _) -> re
+            Sym x -> Sym x
             (Alt a b) -> Alt (f a) (f b)
             (Cut a b) -> Cut (f a) (f b)
             (Seq a b) -> Seq (f a) (f b)
@@ -106,7 +87,7 @@ foldRe1 s =
             Nil -> Nil
     in f
 
-d :: Eq a => a -> Re a -> Re a
+-- d :: Eq a => a -> Re a -> Re a
 d c (Sym Nothing) = Eps
 d c (Sym (Just as))
     | c `elem` as = Eps
@@ -121,12 +102,12 @@ d _ Nil = Nil
 
 ds c = simplify . d c
 
-flapping' :: Re Char
+-- flapping' :: Re Char
 flapping' = simplify $ Cut
     (Not $ dots `Seq` str "flapping" `Seq` dots)
     (dots `Seq` str "ping" `Seq` dots)
 
-flapping :: Re Char
+-- flapping :: Re Char
 -- flapping' = not (dots . "flap") . ping . dots
 flapping = seqs [Not $ dots `Seq` str "flap"
                 , str "ping", dots]
@@ -134,14 +115,14 @@ flapping = seqs [Not $ dots `Seq` str "flap"
 opts r = Alt Eps r
 seqs = foldr Seq Eps
 
-match :: Eq a => Re a -> [a] -> Bool
+-- match :: Eq a => Re a -> [a] -> Bool
 match re s = n $ foldl (flip d) re s
 
 matchn re s = scanl (flip ds) re s
-sym :: [a] -> Re a
+-- sym :: [a] -> Re a
 sym = Sym . return
 
-str :: [a] -> Re a
+-- str :: [a] -> Re a
 str = foldr Seq Eps . map (Sym . Just . (:[]))
 
 dots = Rep (Sym Nothing)
