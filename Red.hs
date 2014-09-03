@@ -1,5 +1,9 @@
 {-# LANGUAGE GADTs,StandaloneDeriving,TupleSections #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 import Data.List
+import Data.Typeable
+import Data.Data
+import Control.Applicative
 
 -- Add character classes later.
 data Re a x where
@@ -9,9 +13,10 @@ data Re a x where
     Seq :: Re a x -> Re a y -> Re a (x,y)
     Rep :: Re a x -> Re a [x]
     Not :: Re a x -> Re a ()
-    Eps :: Re a ()
+    Eps :: x -> Re a x
     Nil :: Re a x
     FMap :: (x -> y) -> Re a x -> Re a y
+    deriving (Typeable)
 
 -- deriving instance Show (ReX a x)
 -- deriving instance Eq (ReX a x)
@@ -27,12 +32,9 @@ show' re = case re of
     Seq a b -> show' a ++ show' b
     Rep a -> show' a ++ "*"
     Not a -> "!" ++ show' a
-    Eps -> "ε"
+    Eps _ -> "ε"
     Nil -> "∅"
-
--- nullable?
-v :: Re b x -> Re b ()
-v a = if n a then Eps else Nil
+    FMap _ a -> show' a -- Not great.
 
 n :: Re a x -> Bool
 n (Sym _) = False
@@ -41,23 +43,41 @@ n (Cut a b) = n a && n b
 n (Seq a b) = n a && n b
 n (Rep _) = True
 n (Not a) = not (n a) -- not convinced.
-n Eps = True
+n (Eps _) = True
 n Nil = False
+n (FMap _ x) = n x
 
--- simplify1 :: Eq a => Re a x -> Re a x
-simplify1 re = case re of
-    Alt Nil x -> FMap Right x
-    Alt x Nil -> FMap Left x
-    Cut Nil x -> Nil
-    Cut x Nil -> Nil
-    Cut (Not Nil) x -> FMap ((),) x
-    Cut x (Not Nil) -> FMap (,()) x
-    Seq Eps x -> FMap ((),) x
-    Seq x Eps -> FMap (,()) x
+n' :: Re a x -> Maybe x
+n' (Sym _) = Nothing
+n' (Alt a b) = (Left <$> n' a) <|> (Right <$> n' b)
+n' (Cut a b) = liftA2 (,) (n' a) (n' b)
+n' (Seq a b) = liftA2 (,) (n' a) (n' b)
+-- Could also just always give []
+n' (Rep a) = fmap (:[]) (n' a) <|> Just []
+n' (Not a) = maybe (Just ()) (const Nothing) $ n' a
+n' (Eps x) = Just x
+n' Nil = Nothing
+n' (FMap f x) = fmap f (n' x)
+
+v' :: Re a x -> Re a x
+v' = maybe Nil Eps . n'
+
+
+simplify,s :: Eq a => Re a x -> Re a x
+s = simplify
+simplify re = case re of
+    Alt Nil x -> FMap Right (s x)
+    Alt x Nil -> FMap Left (s x)
+    Cut Nil _ -> Nil
+    Cut _ Nil -> Nil
+    Cut (Not Nil) x -> FMap ((),) (s x)
+    Cut x (Not Nil) -> FMap (,()) (s x)
+    Seq (Eps x) y -> FMap (x,) (s y)
+    Seq x (Eps y) -> FMap (,y) (s x)
     Seq Nil x -> Nil
     Seq x Nil -> Nil
-    Rep Nil -> FMap (const []) Eps
-    Rep Eps -> FMap (:[]) Eps
+    Rep Nil -> Eps []
+    Rep (Eps x) -> Eps [x]
     -- We've got a choice here!
     Rep (Rep a) -> FMap (:[]) $ Rep a
     -- Rep (Rep a) -> Rep $ FMap (:[]) a
@@ -66,15 +86,25 @@ simplify1 re = case re of
     -- This can be pretty inefficient.
     -- Seq (Rep a) (Rep b) | _ a == b -> FMap (const ([],[])) $ Rep a
     -- Seq (Rep a) (Rep b) -> FMap (const ([],[])) $ Rep a
-    Not (Not x) -> FMap (const ()) x
+    Not (Not x) -> FMap (const ()) (s x)
     -- catch all:
-    x -> x
-simplify = foldRe1 simplify1
+    Sym x -> Sym x
+    Eps x -> Eps x
+    Nil -> Nil
+    FMap f x -> FMap f (s x)
+    Alt x y -> Alt (s x) (s y)
+    -- Cut Sym Sym would be useful.
+    Cut x y ->  Cut (s x) (s y)
+    Seq x y -> Seq (s x) (s y)
+    Rep x -> Rep (s x)
+    Not x -> Not (s x)
+-- simplify = foldRe1 simplify1
 
 -- type C2 a = Re a x -> Re a -> Re a
--- type C1 a = Re a -> Re a
--- foldRe1 :: C1 a -> C1 a 
+-- type C1 a x = Re a x -> Re a x
+-- foldRe1 :: C1 a x -> C1 a x
 -- -- Needs more typing magic!
+{-
 foldRe1 s =
     let f re = s $ case re of
             Sym x -> Sym x
@@ -86,19 +116,22 @@ foldRe1 s =
             Eps -> Eps
             Nil -> Nil
     in f
+-}
 
--- d :: Eq a => a -> Re a -> Re a
-d c (Sym Nothing) = Eps
+d :: Eq a => a -> Re a x -> Re a x
+d c (Sym Nothing) = Eps c
 d c (Sym (Just as))
-    | c `elem` as = Eps
+    | c `elem` as = Eps c
     | otherwise = Nil
 d c (Alt a b) = Alt (d c a) (d c b)
 d c (Cut a b) = Cut (d c a) (d c b)
-d c (Seq a b) = Seq (d c a) b `Alt` Seq (v a) (d c b)
-d c (Rep a) = Seq (d c a) (Rep a)
+d c (Seq a b) = FMap (either id id) $ Seq (d c a) b `Alt` Seq (v' a) (d c b)
+d c (Rep a) = FMap (uncurry (:)) $ Seq (d c a) (Rep a)
 d c (Not a) = Not (d c a) -- Not convinced of this, yet.
-d _ Eps = Nil
+d _ (Eps _) = Nil
 d _ Nil = Nil
+d c (FMap f x) = FMap f (d c x)
+
 
 ds c = simplify . d c
 
@@ -109,11 +142,12 @@ flapping' = simplify $ Cut
 
 -- flapping :: Re Char
 -- flapping' = not (dots . "flap") . ping . dots
-flapping = seqs [Not $ dots `Seq` str "flap"
-                , str "ping", dots]
+flapping = (Not $ dots `Seq` str "flap")
+           `Seq` (str "ping")
+           `Seq` dots
 
-opts r = Alt Eps r
-seqs = foldr Seq Eps
+opts r = Alt (Eps ()) r
+-- seqs = foldr Seq (Eps ())
 
 -- match :: Eq a => Re a -> [a] -> Bool
 match re s = n $ foldl (flip d) re s
@@ -123,7 +157,7 @@ matchn re s = scanl (flip ds) re s
 sym = Sym . return
 
 -- str :: [a] -> Re a
-str = foldr Seq Eps . map (Sym . Just . (:[]))
+str = foldr (\a b -> FMap (uncurry (:)) $ Seq a b) (Eps []) . map (Sym . Just . (:[]))
 
 dots = Rep (Sym Nothing)
 dot = Sym Nothing
