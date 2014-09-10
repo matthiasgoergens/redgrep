@@ -62,6 +62,15 @@ n' (FMap f x) = fmap f (n' x)
 v' :: Re a x -> Re a x
 v' = maybe Nil Eps . n'
 
+-- float up FMap?
+{-
+a :: Re a x -> (y -> x, Re a y)
+a (FMap f x) = let (g, y) = a x in (f . g, y)
+a (Sym x) = (id, Sym x)
+a (Alt x y) = let (gl, x') = a x
+                  (gr, y') = a y
+              in (_ gl gr, Alt x' y')
+-}
 
 simplify,s :: Eq a => Re a x -> Re a x
 s = simplify
@@ -91,6 +100,7 @@ simplify re = case re of
     Sym x -> Sym x
     Eps x -> Eps x
     Nil -> Nil
+    FMap f (FMap g x) -> FMap (f . g) (s x)
     FMap f x -> FMap f (s x)
     Alt x y -> Alt (s x) (s y)
     -- Cut Sym Sym would be useful.
@@ -132,8 +142,24 @@ d _ (Eps _) = Nil
 d _ Nil = Nil
 d c (FMap f x) = FMap f (d c x)
 
+-- Pass to float up FMaps? --- especially needed for minimization.
+
+instance Functor (Re a) where
+    -- We could do something more clever, by recursing.
+    fmap f = FMap f
+
+-- Ha, this is almost trivial!
+instance Applicative (Re a) where
+    pure = Eps 
+    f <*> a = FMap (uncurry ($)) $ Seq f a
+instance Alternative (Re a) where
+    a <|> b = FMap (either id id) $ Alt a b
+    empty = Nil
 
 ds c = simplify . d c
+
+-- -- This should not be possible to define sensibly.
+-- instance Monad (Re a) where
 
 -- flapping' :: Re Char
 flapping' = simplify $ Cut
