@@ -1,22 +1,44 @@
 {-# LANGUAGE GADTs,StandaloneDeriving,TupleSections #-}
-{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
 import Data.List
 import Data.Typeable
 import Data.Data
 import Control.Applicative
+import Test.QuickCheck
 
 -- Add character classes later.
 data Re a x where
+    -- Ranges of letters.  Nothing stands for .
     Sym :: Maybe [a] -> Re a a
+    -- Alternative, |
     Alt :: Re a x -> Re a y -> Re a (Either x y)
+    -- Intersection
     Cut :: Re a x -> Re a y -> Re a (x,y)
+    -- Sequencing
     Seq :: Re a x -> Re a y -> Re a (x,y)
+    -- Repetition, Kleene Star *
     Rep :: Re a x -> Re a [x]
+    -- Complement
     Not :: Re a x -> Re a ()
+    -- Match empty string
     Eps :: x -> Re a x
+    -- Match no string
     Nil :: Re a x
     FMap :: (x -> y) -> Re a x -> Re a y
     deriving (Typeable)
+
+-- How to define Arbitrary instances?
+instance Arbitrary (Re Char Char) where
+    arbitrary = Sym <$> arbitrary
+    shrink (Sym s) = Sym <$> shrink s
+
+instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (x,y)) where
+    arbitrary = elements [Cut, Seq] <*> arbitrary <*> arbitrary
+
+instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (Either x y)) where
+    arbitrary = Alt <$> arbitrary <*> arbitrary
+
+-- How to do Not and Eps and Nil?
 
 -- deriving instance Show (ReX a x)
 -- deriving instance Eq (ReX a x)
@@ -36,6 +58,7 @@ show' re = case re of
     Nil -> "∅"
     FMap _ a -> show' a -- Not great.
 
+-- Something wrong here.
 n :: Re a x -> Bool
 n (Sym _) = False
 n (Alt a b) = n a || n b
@@ -176,8 +199,7 @@ opts r = Alt (Eps ()) r
 -- seqs = foldr Seq (Eps ())
 
 -- match :: Eq a => Re a -> [a] -> Bool
-match re s = n $ foldl (flip d) re s
-
+match  re s = n $ foldl (flip d) re s
 matchn re s = scanl (flip ds) re s
 -- sym :: [a] -> Re a
 sym = Sym . return
@@ -198,7 +220,9 @@ main = do
     putStrLn "---"
     let s = "xflappinge ping blub"
     mapM pp $ matchn flapping s
+    print "match:"
     print $ match flapping s
+    print "/match"
 
     -- print $ match (Not (str "flapping")) "flapping"
     -- print $ match (dots `Seq` (Not $ str "flapping")) "flapping"
