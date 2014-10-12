@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs,StandaloneDeriving,TupleSections #-}
+{-# LANGUAGE GADTs,TupleSections #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
 import Data.List
 import Data.Typeable
@@ -47,7 +47,7 @@ instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (E
 show' :: Re Char x -> String
 show' re = case re of
     Sym Nothing -> "."
-    Sym (Just [x]) -> x:[]
+    Sym (Just [x]) -> [x]
     Sym (Just xs) -> "[" ++ concatMap show xs ++ "]"
     Alt a b -> show' a ++ "|" ++ show' b
     Cut a b -> show' a ++ "&" ++ show' b
@@ -169,7 +169,7 @@ d c (FMap f x) = FMap f (d c x)
 
 instance Functor (Re a) where
     -- We could do something more clever, by recursing.
-    fmap f = FMap f
+    fmap = FMap
 
 -- Ha, this is almost trivial!
 instance Applicative (Re a) where
@@ -191,16 +191,16 @@ flapping' = simplify $ Cut
 
 -- flapping :: Re Char
 -- flapping' = not (dots . "flap") . ping . dots
-flapping = (Not $ dots `Seq` str "flap")
-           `Seq` (str "ping")
+flapping = Not (dots `Seq` str "flap")
+           `Seq` str "ping"
            `Seq` dots
 
-opts r = Alt (Eps ()) r
+opts = Alt (Eps ())
 -- seqs = foldr Seq (Eps ())
 
 -- match :: Eq a => Re a -> [a] -> Bool
-match  re s = n $ foldl (flip d) re s
-matchn re s = scanl (flip ds) re s
+match re = n . foldl (flip d) re
+matchn   = scanl (flip ds)
 -- sym :: [a] -> Re a
 sym = Sym . return
 
@@ -214,12 +214,12 @@ pp = putStrLn . show'
 main = do
     print $ match (sym "a") "a"
     print $ match (Rep (sym "a")) "aaaaaba"
-    mapM pp $ matchn (Rep (sym "a")) "aaaaaba"
+    mapM_ pp $ matchn (Rep (sym "a")) "aaaaaba"
     putStrLn ""
-    mapM pp $ matchn dots "aaaaaba"
+    mapM_ pp $ matchn dots "aaaaaba"
     putStrLn "---"
     let s = "xflappinge ping blub"
-    mapM pp $ matchn flapping s
+    mapM_ pp $ matchn flapping s
     print "match:"
     print $ match flapping s
     print "/match"
