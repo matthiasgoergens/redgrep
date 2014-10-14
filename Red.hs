@@ -6,7 +6,6 @@ import Data.Data
 import Control.Applicative
 import Test.QuickCheck
 
-
 -- Add character classes later.
 data Re a x where
     -- Ranges of letters.  Nothing stands for .
@@ -28,13 +27,13 @@ data Re a x where
     FMap :: (x -> y) -> Re a x -> Re a y
     deriving (Typeable)
 
+-- Just for testing incomplete pattern match warning and GADTs.
 ttt :: Re a [x] -> Int
 ttt (FMap _ _) = 0
 ttt (Eps _) = 1
 ttt (Rep _) = 2
 ttt Nil = 4
 ttt (Sym _) = 5 -- This doesn't always work.
-
 
 -- How to define Arbitrary instances?
 instance Arbitrary (Re Char Char) where
