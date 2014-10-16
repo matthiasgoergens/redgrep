@@ -199,6 +199,8 @@ instance Applicative (Re a) where
 instance Alternative (Re a) where
     a <|> b = FMap (either id id) $ Alt a b
     empty = Nil
+    many = Rep
+    some x = FMap (uncurry (:)) $ Seq x (Rep x)
 
 ds :: Eq a => a -> Re a x -> Re a x
 ds c = simplify . d c
@@ -256,6 +258,8 @@ main = do
     print "match:"
     print $ match flapping s
     print "/match"
+    mapM_ print $ matchn (Rep $ Rep $ Sym $ Just "a") "a"
+    print $ match (many $ many $ Sym $ Just "a") "a"
 
     -- print $ match (Not (str "flapping")) "flapping"
     -- print $ match (dots `Seq` (Not $ str "flapping")) "flapping"
