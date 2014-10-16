@@ -4,6 +4,7 @@
 import Data.Typeable
 import Control.Applicative
 import Test.QuickCheck
+import Control.Arrow
 -- import Data.Either.Combinators
 
 
@@ -230,8 +231,14 @@ opts = FMap (either (const Nothing) Just) . Alt (Eps ())
 match :: Eq a => Re a x -> [a] -> Bool
 -- This runs forever.  Bad.
 match re = n . foldl (flip ds) re
+match' :: Eq a => Re a x -> [a] -> Maybe x
+match' re = n' . foldl (flip ds) re
 matchn :: Eq a => Re a x -> [a] -> [Re a x]
-matchn   = scanl (flip ds)
+matchn  = scanl (flip ds)
+
+matchn' :: Eq a => Re a x -> [a] -> [(Re a x, Maybe x)]
+matchn' re s = fmap (id&&&n') $ matchn re s
+
 sym :: [a] -> Re a a
 sym = Sym . return
 
@@ -256,10 +263,10 @@ main = do
     let s = "xflappinge ping blub"
     mapM_ pp $ matchn flapping s
     print "match:"
-    print $ match flapping s
+    print $ match' flapping s
     print "/match"
-    mapM_ print $ matchn (Rep $ Rep $ Sym $ Just "a") "a"
-    print $ match (many $ many $ Sym $ Just "a") "a"
+    mapM_ print $ matchn' (Rep $ Rep $ Sym $ Just "a") "a"
+    print $ match' (many $ many $ Sym $ Just "a") "a"
 
     -- print $ match (Not (str "flapping")) "flapping"
     -- print $ match (dots `Seq` (Not $ str "flapping")) "flapping"
