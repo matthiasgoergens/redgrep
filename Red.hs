@@ -6,6 +6,8 @@ import Data.Data
 import Control.Applicative
 import Test.QuickCheck
 import Data.Either.Combinators
+import Debug.Trace
+
 
 -- Add character classes later.
 data Re a x where
@@ -53,19 +55,19 @@ instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (E
 -- deriving instance Eq (ReX a x)
 -- deriving instance Ord (ReX a x)
 
-show' :: Re Char x -> String
-show' re = case re of
-    Sym Nothing -> "."
-    Sym (Just [x]) -> [x]
-    Sym (Just xs) -> "[" ++ concatMap show xs ++ "]"
-    Alt a b -> show' a ++ "|" ++ show' b
-    Cut a b -> show' a ++ "&" ++ show' b
-    Seq a b -> show' a ++ show' b
-    Rep a -> show' a ++ "*"
-    Not a -> "!" ++ show' a
-    Eps _ -> "ε"
-    Nil -> "∅"
-    FMap _ a -> show' a -- Not great.
+instance Show c => Show (Re c x) where
+    show re = case re of
+        Sym Nothing -> "."
+        Sym (Just [x]) -> show x
+        Sym (Just xs) -> "[" ++ concatMap show xs ++ "]"
+        Alt a b -> show a ++ "|" ++ show b
+        Cut a b -> show a ++ "&" ++ show b
+        Seq a b -> show a ++ show b
+        Rep a -> show a ++ "*"
+        Not a -> "!" ++ show a
+        Eps _ -> "ε"
+        Nil -> "∅"
+        FMap _ a -> show a -- Not great.
 
 -- Something wrong here.
 n :: Re a x -> Bool
@@ -204,7 +206,8 @@ flapping' = simplify $ Cut
 
 -- flapping :: Re Char
 -- flapping' = not (dots . "flap") . ping . dots
-flapping = Not (dots `Seq` str "flap")
+flapping :: Re Char String
+flapping = FMap (const []) $ Not (dots `Seq` str "flap")
            `Seq` str "ping"
            `Seq` dots
 
@@ -223,7 +226,7 @@ str = foldr (\a b -> FMap (uncurry (:)) $ Seq a b) (Eps []) . map (Sym . Just . 
 
 dots = Rep (Sym Nothing)
 dot = Sym Nothing
-pp = putStrLn . show'
+pp = putStrLn . show
 
 main = do
     print $ match (sym "a") "a"

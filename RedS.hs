@@ -6,6 +6,18 @@ import Data.Data
 import Control.Applicative
 import Test.QuickCheck
 
+data Re' a x where
+    Cut' :: Re' a x -> Re' a y -> Re' a (x,y)
+    Alt' :: Re' a x -> Re' a y -> Re' a (Either x y)
+    -- Match empty string; doubles as return/pure
+    Eps' :: x -> Re' a x
+    -- Match no string
+    Nil' :: Re' a x
+    -- This ain't enough.
+    FMap' :: (x -> y) -> Re' a x -> Re' a y
+    deriving (Typeable)
+
+
 -- Add character classes later.
 data Re a x y where
     Cut :: Re a x x' -> Re a y y' -> Re a (x,y) (x',y')
@@ -60,17 +72,19 @@ a (Alt x y) = let (gl, x') = a x
               in (_ gl gr, Alt x' y')
 -}
 
-simplify,s :: Eq a => Re a x x' -> Re a x x'
+simplify,s :: Eq a => Re' a x -> Re' a x
 s = simplify
 simplify re = case re of
-    Cut Nil _ -> Nil
-    Cut _ Nil -> Nil
-    Eps x -> Eps x
-    Nil -> Nil
-    FMap f (FMap g x) -> FMap (f . g) (s x)
+    Cut' Nil' _ -> Nil'
+    Cut' _ Nil' -> Nil'
+    Alt' Nil' x -> FMap' Right (s x)
+    Alt' x Nil' -> FMap' Left (s x)
+    Eps' x -> Eps' x
+    Nil' -> Nil'
+    FMap' f (FMap' g x) -> FMap' (f . g) (s x)
 --    FMap f x -> FMap f (s x)
     -- Cut Sym Sym would be useful.
-    Cut x y ->  Cut (s x) (s y)
+    Cut' x y ->  Cut' (s x) (s y)
 -- simplify = foldRe1 simplify1
 
 -- type C2 a = Re a x -> Re a -> Re a
@@ -98,7 +112,7 @@ d c (FMap f x) = FMap f (d c x)
 
 -- Ha, this is almost trivial!
 
-ds c = simplify . d c
+-- ds c = simplify . d c
 
 -- -- This should not be possible to define sensibly.
 -- instance Monad (Re a) where
