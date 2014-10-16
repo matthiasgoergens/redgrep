@@ -1,12 +1,10 @@
 {-# LANGUAGE GADTs,TupleSections #-}
+{-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
-import Data.List
 import Data.Typeable
-import Data.Data
 import Control.Applicative
 import Test.QuickCheck
-import Data.Either.Combinators
-import Debug.Trace
+-- import Data.Either.Combinators
 
 
 data Re a x where
@@ -31,17 +29,20 @@ data Re a x where
     deriving (Typeable)
 
 -- Just for testing incomplete pattern match warning and GADTs.
+{-
 ttt :: Re a [x] -> Int
 ttt (FMap _ _) = 0
 ttt (Eps _) = 1
 ttt (Rep _) = 2
 ttt Nil = 4
 ttt (Sym _) = 5 -- This doesn't always work.
+-}
 
 -- How to define Arbitrary instances?
 instance Arbitrary (Re Char Char) where
     arbitrary = Sym <$> arbitrary
     shrink (Sym s) = Sym <$> shrink s
+    shrink _ = []
 
 instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (x,y)) where
     arbitrary = elements [Cut, Seq] <*> arbitrary <*> arbitrary
@@ -97,8 +98,9 @@ v' :: Re a x -> Re a x
 v' = maybe Nil Eps . n'
 
 -- float up FMap?
--- Existentials might do the trick.
+-- Existentials might do the trick.  Or, rather, necessary for something else.
 -- a :: Re a x -> (y -> x, Re a y)
+{-
 a :: Re a x -> Re a x
 a (FMap f x) = case a x of
     FMap g y -> FMap (f.g) y
@@ -108,10 +110,12 @@ a (Alt x y) = case (a x, a y) of
     (FMap f x, FMap g y) -> FMap (mapBoth f g) (Alt x y)
     (FMap f x,        y) -> FMap (mapLeft f)   (Alt x y)
     (       x, FMap g y) -> FMap (mapRight  g) (Alt x y)
+-}
 
 
 simplify,s :: Eq a => Re a x -> Re a x
 s = simplify
+-- Lenses or boilerplate scrapping?
 simplify re = case re of
     Alt Nil x -> FMap Right (s x)
     Alt x Nil -> FMap Left (s x)
@@ -121,10 +125,12 @@ simplify re = case re of
     Cut x (Not Nil) -> FMap (,()) (s x)
     Seq (Eps x) y -> FMap (x,) (s y)
     Seq x (Eps y) -> FMap (,y) (s x)
-    Seq Nil x -> Nil
-    Seq x Nil -> Nil
+    Seq Nil _ -> Nil
+    Seq _ Nil -> Nil
     Rep Nil -> Eps []
-    Rep (Eps x) -> Eps [x]
+    -- We've got a choice here.
+    Rep (Eps _) -> Eps []
+    -- Rep (Eps x) -> Eps [x,..]
     -- We've got a choice here!
     Rep (Rep a) -> FMap (:[]) $ Rep a
     -- Rep (Rep a) -> Rep $ FMap (:[]) a
@@ -194,13 +200,17 @@ instance Alternative (Re a) where
     a <|> b = FMap (either id id) $ Alt a b
     empty = Nil
 
+ds :: Eq a => a -> Re a x -> Re a x
 ds c = simplify . d c
 
 -- -- This should not be possible to define sensibly.
--- instance Monad (Re a) where
+instance Monad (Re a) where
+    (>>=) = undefined
+    return = pure
 
 -- flapping' :: Re Char
-flapping' = simplify $ Cut
+flapping' :: Re Char ()
+flapping' = simplify . FMap (const ()) $ Cut
     (Not $ dots `Seq` str "flapping" `Seq` dots)
     (dots `Seq` str "ping" `Seq` dots)
 
@@ -211,23 +221,29 @@ flapping = FMap (const []) $ Not (dots `Seq` str "flap")
            `Seq` str "ping"
            `Seq` dots
 
-opts = Alt (Eps ())
+opts :: Re a y -> Re a (Maybe y)
+opts = FMap (either (const Nothing) Just) . Alt (Eps ())
 -- seqs = foldr Seq (Eps ())
 
--- match :: Eq a => Re a -> [a] -> Bool
+match :: Eq a => Re a x -> [a] -> Bool
 -- This runs forever.  Bad.
 match re = n . foldl (flip ds) re
+matchn :: Eq a => Re a x -> [a] -> [Re a x]
 matchn   = scanl (flip ds)
--- sym :: [a] -> Re a
+sym :: [a] -> Re a a
 sym = Sym . return
 
--- str :: [a] -> Re a
+str :: [a] -> Re a [a]
 str = foldr (\a b -> FMap (uncurry (:)) $ Seq a b) (Eps []) . map (Sym . Just . (:[]))
 
+dots :: Re a [a]
 dots = Rep (Sym Nothing)
+dot :: Re a a
 dot = Sym Nothing
+pp :: Re Char [Char] -> IO ()
 pp = putStrLn . show
 
+main :: IO ()
 main = do
     print $ match (sym "a") "a"
     print $ match (Rep (sym "a")) "aaaaaba"
