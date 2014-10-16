@@ -5,6 +5,7 @@ import Data.Typeable
 import Data.Data
 import Control.Applicative
 import Test.QuickCheck
+import Data.Either.Combinators
 
 -- Add character classes later.
 data Re a x where
@@ -94,14 +95,18 @@ v' :: Re a x -> Re a x
 v' = maybe Nil Eps . n'
 
 -- float up FMap?
-{-
-a :: Re a x -> (y -> x, Re a y)
-a (FMap f x) = let (g, y) = a x in (f . g, y)
-a (Sym x) = (id, Sym x)
-a (Alt x y) = let (gl, x') = a x
-                  (gr, y') = a y
-              in (_ gl gr, Alt x' y')
--}
+-- Existentials might do the trick.
+-- a :: Re a x -> (y -> x, Re a y)
+a :: Re a x -> Re a x
+a (FMap f x) = case a x of
+    FMap g y -> FMap (f.g) y
+    x -> FMap f x
+a (Sym x) = Sym x
+a (Alt x y) = case (a x, a y) of
+    (FMap f x, FMap g y) -> FMap (mapBoth f g) (Alt x y)
+    (FMap f x,        y) -> FMap (mapLeft f)   (Alt x y)
+    (       x, FMap g y) -> FMap (mapRight  g) (Alt x y)
+
 
 simplify,s :: Eq a => Re a x -> Re a x
 s = simplify
