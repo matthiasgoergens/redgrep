@@ -7,52 +7,43 @@ import Control.Applicative
 import Test.QuickCheck
 
 -- Add character classes later.
-data Re a x y where
+data Re a x where
     -- Ranges of letters.  Nothing stands for .
-    Sym :: Maybe [a] -> Re a a a
+    Sym :: Maybe [a] -> Re a a
     -- Alternative, |
-    Alt :: Re a x x' -> Re a y y' -> Re a (Either x y) (Either x' y')
+    Alt :: Re a x -> Re a y -> Re a (Either x y)
     -- Intersection
-    Cut :: Re a x x' -> Re a y y' -> Re a (x,y) (x',y')
+    Cut :: Re a x -> Re a y -> Re a (x,y)
     -- Sequencing
-    Seq :: Re a x x' -> Re a y y' -> Re a (x,y) (x',y')
+    Seq :: Re a x -> Re a y -> Re a (x,y)
     -- Repetition, Kleene Star *
-    Rep :: Re a x x' -> Re a [x] [x']
+    Rep :: Re a x -> Re a [x]
     -- Complement
-    Not :: Re a x x' -> Re a (Not x) ()
+    Not :: Re a x -> Re a ()
     -- Match empty string
-    Eps :: x' -> Re a x x'
+    Eps :: x -> Re a x
     -- Match no string
-    Nil :: Re a x x'
-    -- This ain't enough.
-    FMap :: (x' -> y') -> Re a x x' -> Re a (FMap x) y'
-    FMap2 :: (x -> y) -> (x' -> y') -> Re a x x' -> Re a (FMap2 x y) y'
+    Nil :: Re a x
+    FMap :: (x -> y) -> Re a x -> Re a y
     deriving (Typeable)
 
-data Not x
-data FMap x
-data FMap2 x y
-
 -- Just for testing incomplete pattern match warning and GADTs.
-ttt :: Re a x [x'] -> Int
+ttt :: Re a [x] -> Int
 ttt (FMap _ _) = 0
 ttt (Eps _) = 1
 ttt (Rep _) = 2
 ttt Nil = 4
 ttt (Sym _) = 5 -- This doesn't always work.
--- This should not type check.  And indeed, does not.
--- ttt (Seq _ _) = 6
-
 
 -- How to define Arbitrary instances?
-instance Arbitrary (Re Char Char Char) where
+instance Arbitrary (Re Char Char) where
     arbitrary = Sym <$> arbitrary
     shrink (Sym s) = Sym <$> shrink s
 
-instance (Arbitrary (Re Char x x'), Arbitrary (Re Char y y')) => Arbitrary (Re Char (x,y) (x',y')) where
+instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (x,y)) where
     arbitrary = elements [Cut, Seq] <*> arbitrary <*> arbitrary
 
-instance (Arbitrary (Re Char x x'), Arbitrary (Re Char y y')) => Arbitrary (Re Char (Either x y) (Either x' y')) where
+instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (Either x y)) where
     arbitrary = Alt <$> arbitrary <*> arbitrary
 
 -- How to do Not and Eps and Nil?
@@ -61,7 +52,7 @@ instance (Arbitrary (Re Char x x'), Arbitrary (Re Char y y')) => Arbitrary (Re C
 -- deriving instance Eq (ReX a x)
 -- deriving instance Ord (ReX a x)
 
-show' :: Re Char x x' -> String
+show' :: Re Char x -> String
 show' re = case re of
     Sym Nothing -> "."
     Sym (Just [x]) -> [x]
@@ -76,7 +67,7 @@ show' re = case re of
     FMap _ a -> show' a -- Not great.
 
 -- Something wrong here.
-n :: Re a x y -> Bool
+n :: Re a x -> Bool
 n (Sym _) = False
 n (Alt a b) = n a || n b
 n (Cut a b) = n a && n b
@@ -87,7 +78,7 @@ n (Eps _) = True
 n Nil = False
 n (FMap _ x) = n x
 
-n' :: Re a x x' -> Maybe x'
+n' :: Re a x -> Maybe x
 n' (Sym _) = Nothing
 n' (Alt a b) = (Left <$> n' a) <|> (Right <$> n' b)
 n' (Cut a b) = liftA2 (,) (n' a) (n' b)
@@ -99,7 +90,7 @@ n' (Eps x) = Just x
 n' Nil = Nothing
 n' (FMap f x) = fmap f (n' x)
 
-v' :: Re a x x' -> Re a x x'
+v' :: Re a x -> Re a x
 v' = maybe Nil Eps . n'
 
 -- float up FMap?
@@ -112,7 +103,7 @@ a (Alt x y) = let (gl, x') = a x
               in (_ gl gr, Alt x' y')
 -}
 
-simplify,s :: Eq a => Re a x x' -> Re a x x'
+simplify,s :: Eq a => Re a x -> Re a x
 s = simplify
 simplify re = case re of
     Alt Nil x -> FMap Right (s x)
@@ -168,7 +159,7 @@ foldRe1 s =
     in f
 -}
 
-d :: Eq a => a -> Re a x x' -> Re a x x'
+d :: Eq a => a -> Re a x -> Re a x
 d c (Sym Nothing) = Eps c
 d c (Sym (Just as))
     | c `elem` as = Eps c
@@ -184,15 +175,15 @@ d c (FMap f x) = FMap f (d c x)
 
 -- Pass to float up FMaps? --- especially needed for minimization.
 
-instance Functor (Re a x) where
+instance Functor (Re a) where
     -- We could do something more clever, by recursing.
     fmap = FMap
 
 -- Ha, this is almost trivial!
-instance Applicative (Re a x) where
+instance Applicative (Re a) where
     pure = Eps 
     f <*> a = FMap (uncurry ($)) $ Seq f a
-instance Alternative (Re a x) where
+instance Alternative (Re a) where
     a <|> b = FMap (either id id) $ Alt a b
     empty = Nil
 
