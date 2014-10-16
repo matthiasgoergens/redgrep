@@ -229,7 +229,6 @@ opts = FMap (either (const Nothing) Just) . Alt (Eps ())
 -- seqs = foldr Seq (Eps ())
 
 match :: Eq a => Re a x -> [a] -> Bool
--- This runs forever.  Bad.
 match re = n . foldl (flip ds) re
 match' :: Eq a => Re a x -> [a] -> Maybe x
 match' re = n' . foldl (flip ds) re
