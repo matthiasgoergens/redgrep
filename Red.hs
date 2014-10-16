@@ -9,9 +9,9 @@ import Data.Either.Combinators
 import Debug.Trace
 
 
--- Add character classes later.
 data Re a x where
     -- Ranges of letters.  Nothing stands for .
+    -- TODO: Add character classes later.
     Sym :: Maybe [a] -> Re a a
     -- Alternative, |
     Alt :: Re a x -> Re a y -> Re a (Either x y)
