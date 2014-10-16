@@ -212,7 +212,8 @@ opts = Alt (Eps ())
 -- seqs = foldr Seq (Eps ())
 
 -- match :: Eq a => Re a -> [a] -> Bool
-match re = n . foldl (flip d) re
+-- This runs forever.  Bad.
+match re = n . foldl (flip ds) re
 matchn   = scanl (flip ds)
 -- sym :: [a] -> Re a
 sym = Sym . return
