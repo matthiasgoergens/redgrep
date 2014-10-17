@@ -197,13 +197,13 @@ instance Functor (Re a) where
 instance Applicative (Re a) where
     pure = Eps 
     f <*> a = FMap (uncurry ($)) $ Seq f a
-    a *> b = FMap snd $ Seq a b
     a <* b = FMap fst $ Seq a b
+    a *> b = FMap snd $ Seq a b
 instance Alternative (Re a) where
-    a <|> b = FMap (either id id) $ Alt a b
     empty = Nil
-    many = Rep
+    a <|> b = FMap (either id id) $ Alt a b
     some x = FMap (uncurry (:)) $ Seq x (Rep x)
+    many = Rep
 
 ds :: Eq a => a -> Re a x -> Re a x
 ds c = simplify . d c
