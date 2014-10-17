@@ -1,8 +1,14 @@
 {-# LANGUAGE GADTs,TupleSections #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
+module Main where
+import Prelude hiding (sequence, mapM)
+import Data.Monoid
+import qualified Data.Set as Set
+import Data.Ord
 import Data.Typeable
 import Control.Applicative
+-- TODO: Look into lenses.
 import Test.QuickCheck
 import Control.Arrow
 -- import Data.Either.Combinators
@@ -72,6 +78,7 @@ instance Show c => Show (Re c x) where
         FMap _ a -> show a -- Not great.
 
 -- Something wrong here.
+-- n r === does r accept the empty string?
 n :: Re a x -> Bool
 n (Sym _) = False
 n (Alt a b) = n a || n b
@@ -188,6 +195,71 @@ d _ Nil = Nil
 d c (FMap f x) = FMap f (d c x)
 
 -- Pass to float up FMaps? --- especially needed for minimization.
+
+cmp :: Ord a => [a] -> [a] -> Ordering
+cmp = comparing (length &&& id)
+
+{-
+-- TODO: prefix trees should actually work better.
+-- Need to produce ordered list of results.  Order by (length &&& id)
+-- Nothing stands for: don't care.
+enumerate, en :: Ord a => Re a x -> [[Maybe a]]
+enumerate = en
+en (Sym x) = sortBy cmp $ fmap pure $ sequenceA x
+-- Will get some strings twice.
+en (Alt x y) = mergeBy cmp (en x) (en y)
+en (Cut x y) = isectBy cmp (en x) (en y)
+-- en (Rep x) = _ -- like Seq?
+-- en (Seq x y) = _ -- mergeAllBy and fmap traverse
+-- en (Not x) = _ -- opposite of intersect..
+en (Eps x) = [[]]
+en Nil = []
+en (FMap _ x) = en x
+-}
+
+next :: Ord a => Re a x -> Set a
+next (Sym xs) = maybe omega fromList xs
+next (Alt x y) = union (next x) (next y)
+next (Cut x y) = intersection (next x) (next y)
+next (Seq x y) = (if n x then union (next y) else id) (next x)
+next (Rep x) = next x
+next (Not x) = complement $ next x
+next (Eps _) = mempty
+next Nil = mempty
+next (FMap _ x) = next x
+
+-- TODO:  Put into own module!  Sets with omega.
+-- Left x === \Omega - x
+-- Right x === x
+newtype Set a = Set (Either (Set.Set a) (Set.Set a))
+union :: Ord a => Set a -> Set a -> Set a
+union (Set a) (Set b) = Set $ case (a,b) of
+    (Left a, Left b) -> Left $ Set.intersection a b
+    (Right a, Right b) -> Right $ Set.union a b
+    (Left a, Right b) -> Left $ a Set.\\ b
+    (Right a, Left b) -> Left $ b Set.\\ a
+intersection :: Ord a => Set a -> Set a -> Set a
+intersection (Set a) (Set b) = Set $ case (a,b) of
+    (Left a, Left b) -> Left $ Set.union a b
+    (Left a, Right b) -> Right $ b Set.\\ a
+    (Right a, Left b) -> Right $ a Set.\\ b
+    (Right a, Right b) -> Right $ Set.intersection a b
+complement :: Set a -> Set a
+complement (Set a) = Set $ case a of
+    Left a -> Right a
+    Right a -> Left a
+omega :: Ord a => Set a
+omega = Set $ Left mempty
+fromList :: Ord a => [a] -> Set a
+fromList = Set . Right . Set.fromList
+-- TODO: Functor instance?  Possible exactly iff we have a Functor instance for Set.Set
+instance Ord a => Monoid (Set a) where
+    mempty = Set $ Right mempty
+    mappend = union
+    
+-- empty :: Set a
+-- empty = Right empty
+
 
 instance Functor (Re a) where
     -- We could do something more clever, by recursing.
