@@ -268,7 +268,7 @@ main = do
     print "/match"
     mapM_ print $ matchn' (Rep $ Rep $ Sym $ Just "a") "a"
     print $ match' (many $ many $ Sym $ Just "a") "a"
-    print $ match' (many $ fmap (either undefined id) $ Alt Nil $ many $ Sym $ Just "a") "a"
+    print $ match' (many $ fmap (either id id) $ Alt Nil $ many $ Sym $ Just "a") "a"
 
     -- print $ match (Not (str "flapping")) "flapping"
     -- print $ match (dots `Seq` (Not $ str "flapping")) "flapping"
