@@ -217,27 +217,35 @@ en Nil = []
 en (FMap _ x) = en x
 -}
 
+-- next item of interest, doesn't lead to a match in general.
 next :: Ord a => Re a x -> Set a
-next (Sym xs) = maybe omega fromList xs
+next (Sym xs) = maybe mempty fromList xs
 next (Alt x y) = union (next x) (next y)
-next (Cut x y) = intersection (next x) (next y)
+next (Cut x y) = union (next x) (next y)
 next (Seq x y) = (if n x then union (next y) else id) (next x)
 next (Rep x) = next x
-next (Not x) = complement $ next x
+-- If we were not just interested in any item of interest,
+-- but in what moves us forward, this would be broken.
+-- We couldn't just operate on the next item.
+-- We'd need something like the following, but cleverer:
+-- next (Not x) = complement $ next x
+next (Not x) = next x
 next (Eps _) = mempty
 next Nil = mempty
 next (FMap _ x) = next x
 
 -- TODO:  Put into own module!  Sets with omega.
+-- TODO: QuickCheck
 -- Left x === \Omega - x
 -- Right x === x
 newtype Set a = Set (Either (Set.Set a) (Set.Set a))
+    deriving (Show, Ord, Eq)
 union :: Ord a => Set a -> Set a -> Set a
 union (Set a) (Set b) = Set $ case (a,b) of
     (Left a, Left b) -> Left $ Set.intersection a b
-    (Right a, Right b) -> Right $ Set.union a b
     (Left a, Right b) -> Left $ a Set.\\ b
     (Right a, Left b) -> Left $ b Set.\\ a
+    (Right a, Right b) -> Right $ Set.union a b
 intersection :: Ord a => Set a -> Set a -> Set a
 intersection (Set a) (Set b) = Set $ case (a,b) of
     (Left a, Left b) -> Left $ Set.union a b
@@ -341,6 +349,8 @@ main = do
     mapM_ print $ matchn' (Rep $ Rep $ Sym $ Just "a") "a"
     print $ match' (many $ many $ Sym $ Just "a") "a"
     print $ match' (many $ fmap (either id id) $ Alt Nil $ many $ Sym $ Just "a") "a"
+    print $ next flapping
+    print $ next $ Not $ str "ab"
 
     -- print $ match (Not (str "flapping")) "flapping"
     -- print $ match (dots `Seq` (Not $ str "flapping")) "flapping"
