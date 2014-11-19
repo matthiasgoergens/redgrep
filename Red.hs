@@ -18,6 +18,8 @@ import Test.QuickCheck.All
 import Control.Arrow
 import Control.Monad
 
+import Debug.Trace (trace)
+
 
 data Re a x where
     -- Ranges of letters.  Nothing stands for .
@@ -39,6 +41,65 @@ data Re a x where
     Nil :: Re a x
     FMap :: (x -> y) -> Re a x -> Re a y
     deriving (Typeable)
+
+floatFMap :: Re a x -> Re a x
+floatFMap = fold' Sym alt cut seq rep not Eps Nil fmap where
+    alt (FMap f x) (FMap g y) = FMap (f +++ g) $ Alt x y
+    alt (FMap f x) y = FMap (left f) $ Alt x y
+    alt x (FMap g y) = FMap (right g) $ Alt x y
+    alt x y = Alt x y
+
+    cut (FMap f x) (FMap g y) = FMap (f *** g) $ Cut x y
+    cut (FMap f x) y = FMap (first f) $ Cut x y
+    cut x (FMap g y) = FMap (second g) $ Cut x y
+    cut x y = Cut x y
+
+    seq (FMap f x) (FMap g y) = FMap (f *** g) $ Seq x y
+    seq (FMap f x) y = FMap (first f) $ Seq x y
+    seq x (FMap g y) = FMap (second g) $ Seq x y
+    seq x y = Seq x y
+
+    rep (FMap f x) = FMap (map f) $ Rep x
+    rep x = Rep x
+
+    not (FMap f x) = Not x
+    not x = Not x
+
+    fmap f (FMap g x) = FMap (f.g) x
+    fmap f x = FMap f x
+
+-- Just for testing
+foldId :: Re a x -> Re a x
+foldId = fold' Sym Alt Cut Seq Rep Not Eps Nil FMap
+
+prop_foldID :: Re Char [Char] -> Bool
+prop_foldID re = show re == show (foldId re)
+
+fold'
+    :: forall a
+    .  (Maybe [a] -> Re a a) -- Sym
+    -> (forall x y . Re a x -> Re a y -> Re a (Either x y)) -- Alt
+    -> (forall x y . Re a x -> Re a y -> Re a (x,y)) -- Cut
+    -> (forall x y . Re a x -> Re a y -> Re a (x,y)) -- Seq
+    -> (forall x . Re a x -> Re a [x]) -- Rep
+    -> (forall x . Re a x -> Re a ()) -- Not
+    -> (forall x . x -> Re a x) -- Eps
+    -> (forall x . Re a x) -- Nil
+    -> (forall x y . (x -> y) -> Re a x -> Re a y) -- FMap
+    -> forall x . Re a x -> Re a x
+fold' sym alt cut seq rep not eps nil fmap =
+    let h :: forall y. Re a y -> Re a y
+        h re = case re of
+            Sym char -> sym char
+            Alt x y -> alt (h x) (h y)
+            Cut x y -> cut (h x) (h y)
+            Seq x y -> seq (h x) (h y)
+            Rep x -> rep (h x)
+            Not x -> not (h x)
+            Eps x -> eps x
+            Nil -> nil
+            FMap f x -> fmap f (h x)
+    in h
 
 fold
     :: forall a b x
@@ -74,6 +135,23 @@ height :: Re a x -> Int
 height = fold (const 1) m m m (1+) (1+) 1 1 (1+) where
     m a b = 1 + max a b
 
+prop_float_finite :: Re Char [Char] -> Bool
+prop_float_finite re = length (show $ floatFMap re) >= 0
+
+
+prop_floatFMapS :: Re Char [Char] -> Bool
+prop_floatFMapS re = case floatFMap re of
+    FMap _ x -> noFMap x
+    x -> noFMap x
+
+prop_floatFMap_inSimplify :: Re Char [Char] -> Bool
+prop_floatFMap_inSimplify re = case simplify re of
+    FMap _ x -> noFMap x
+    x -> noFMap x
+
+noFMap :: Re a x -> Bool
+noFMap = fold (const True) (&&) (&&) (&&) id id True True (const False)
+
 -- Just for testing incomplete pattern match warning and GADTs.
 {-
 ttt :: Re a [x] -> Int
@@ -90,17 +168,23 @@ ttt (Sym _) = 5 -- This doesn't always work.
 -- How to define Arbitrary instances?
 -- CoArbitrary via Show?
 instance (Arbitrary a, Applicative m, Monoid (m a), Arbitrary (m a)) => Arbitrary (Re a (m a)) where
-    arbitrary = oneof
-        [ FMap pure . Sym <$> arbitrary
-        , FMap (either id id) .: Alt <$> arbitrary <*> arbitrary 
-        , FMap (uncurry mappend) .: Cut <$> arbitrary <*> arbitrary
-        , FMap (uncurry mappend) .: Seq <$> arbitrary <*> arbitrary
-        , FMap mconcat . Rep <$> arbitrary
-        , FMap (const mempty) . Not <$> (arbitrary :: Gen (Re a (m a)))
-        , Eps <$> arbitrary
-        , pure Nil
-        -- , FMap . apply <$> arbitrary <*> arbitrary
-        ]
+    arbitrary = sized $ \n ->
+        let simple = [ FMap pure . Sym <$> arbitrary
+                     , Eps <$> arbitrary
+                     , pure Nil ]
+            r1 = resize (n-1)
+            r2 = resize (n `div` 2)
+            complex = [ r2 $ FMap (either id id) .: Alt <$> arbitrary <*> arbitrary 
+                      , r2 $ FMap (uncurry mappend) .: Cut <$> arbitrary <*> arbitrary
+                      , r2 $ FMap (uncurry mappend) .: Seq <$> arbitrary <*> arbitrary
+                      , r1 $ FMap mconcat . Rep <$> arbitrary
+                      , r1 $ FMap (const mempty) . Not <$> (arbitrary :: Gen (Re a (m a)))
+                      -- , r1 $ FMap . apply <$> arbitrary <*> arbitrary
+                      ]
+        in if n <= 0
+        then oneof simple
+        else oneof $ simple ++ complex
+        
     shrink = shrink'
     -- shrink (Sym s) = Sym <$> shrink s
     -- shrink _ = []
@@ -144,7 +228,7 @@ instance Show Char => Show (Re Char x) where
         Not a -> showParen (d > 8) $ showString "!" . showsPrec 9 a
         Eps _ -> showString "ε"
         Nil -> showString "∅"
-        FMap _ a -> showString "$" . showsPrec d a -- Not great.
+        FMap _ a -> showParen (d > 8) $ showString "$" . showsPrec 9 a -- Not great.
 
 -- Something wrong here.
 -- n r === does r accept the empty string?
@@ -430,6 +514,7 @@ prop_match_noincrease re s = descending $ map size $ matchn re s where
     descending l = l == reverse (sort l)
 
 return []
+-- runTests = $verboseCheckAll
 runTests = $quickCheckAll
 
 main :: IO ()
