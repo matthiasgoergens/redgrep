@@ -515,7 +515,7 @@ pp :: Re Char [Char] -> IO ()
 pp = putStrLn . show
 
 prop_float_noincrease :: Re Char String -> Bool
-prop_float_noincrease re = size (floatFMap re) >= size re
+prop_float_noincrease re = size (floatFMap re) <= size re
 
 prop_match_noincrease :: Re Char String -> String -> Bool
 prop_match_noincrease re s = descending $ map size $ matchn re s where
