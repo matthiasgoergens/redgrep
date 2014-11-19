@@ -189,8 +189,8 @@ a (Alt x y) = case (a x, a y) of
     (       x, FMap g y) -> FMap (mapRight  g) (Alt x y)
 -}
 
-prop_simplify :: Re Char String -> Bool
-prop_simplify re = descending . take 100 . map size $ iterate simplify re where
+prop_simplify_notBigger :: Re Char String -> Bool
+prop_simplify_notBigger re = descending . take 100 . map size $ iterate simplify re where
     descending l = l == reverse (sort l)
 
 
