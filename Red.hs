@@ -140,17 +140,18 @@ prop_float_finite re = length (show $ floatFMap re) >= 0
 
 
 prop_floatFMapS :: Re Char [Char] -> Bool
-prop_floatFMapS re = case floatFMap re of
-    FMap _ x -> noFMap x
-    x -> noFMap x
+prop_floatFMapS re = topFMap $ floatFMap re
+
 
 prop_floatFMap_inSimplify :: Re Char [Char] -> Bool
-prop_floatFMap_inSimplify re = case simplify re of
-    FMap _ x -> noFMap x
-    x -> noFMap x
+prop_floatFMap_inSimplify re = topFMap $ simplify re
 
 noFMap :: Re a x -> Bool
 noFMap = fold (const True) (&&) (&&) (&&) id id True True (const False)
+
+topFMap :: Re a x -> Bool
+topFMap (FMap _ x) = noFMap x
+topFMap x = noFMap x
 
 -- Just for testing incomplete pattern match warning and GADTs.
 {-
@@ -185,7 +186,10 @@ instance (Arbitrary a, Applicative m, Monoid (m a), Arbitrary (m a)) => Arbitrar
         then oneof simple
         else oneof $ simple ++ complex
         
-    shrink = shrink'
+    shrink re = (let f = floatFMap re in if not (topFMap re) then (floatFMap re:) else id)
+              . (let s = simplify re in if size s < size re then (s:) else id)
+              $ shrink' re where
+    
     -- shrink (Sym s) = Sym <$> shrink s
     -- shrink _ = []
 
@@ -278,9 +282,9 @@ prop_simplify_notBigger re = descending . take 100 . map size $ iterate simplify
     descending l = l == reverse (sort l)
 
 
-simplify :: forall a x . Eq a => Re a x -> Re a x
+simplify :: forall a x . Re a x -> Re a x
 -- Lenses or boilerplate scrapping?
-simplify = fold' sym alt cut seq rep not eps nil fm where
+simplify = (!!20) . iterate (floatFMap . fold' sym alt cut seq rep not eps nil fm)  where
     sym x = Sym x
 
     alt Nil x = FMap Right x
@@ -291,11 +295,10 @@ simplify = fold' sym alt cut seq rep not eps nil fm where
     cut _ Nil = Nil
     cut (Not Nil) x = FMap ((),) x
     cut x (Not Nil) = FMap (,()) x
-    -- Cut Sym Sym would be useful.
-
     cut (Eps x) y = FMap (x,) (v y)
     cut x (Eps y) = FMap (,y) (v x)
     cut x y = Cut x y
+    -- Cut Sym Sym would be useful.
 
     seq (Eps x) y = FMap (x,) y
     seq x (Eps y) = FMap (,y) x
@@ -510,6 +513,9 @@ dot :: Re a a
 dot = Sym Nothing
 pp :: Re Char [Char] -> IO ()
 pp = putStrLn . show
+
+prop_float_noincrease :: Re Char String -> Bool
+prop_float_noincrease re = size (floatFMap re) >= size re
 
 prop_match_noincrease :: Re Char String -> String -> Bool
 prop_match_noincrease re s = descending $ map size $ matchn re s where
