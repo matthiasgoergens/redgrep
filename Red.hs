@@ -114,7 +114,7 @@ fold
     -> (b -> b) -- FMap
     -> Re a x -> b
 fold sym alt cut seq rep not eps nil fmap =
-    let h :: forall y. Re a y -> b
+    let h :: forall y . Re a y -> b
         h re = case re of
             Sym char -> sym char
             Alt x y -> alt (h x) (h y)
@@ -280,49 +280,51 @@ prop_simplify_notBigger re = descending . take 100 . map size $ iterate simplify
 
 simplify :: forall a x . Eq a => Re a x -> Re a x
 -- Lenses or boilerplate scrapping?
-simplify = s where
-  s :: forall y . Re a y -> Re a y
-  s re = case re of
-    Alt Nil x -> FMap Right (s x)
-    Alt x Nil -> FMap Left (s x)
+simplify = fold' sym alt cut seq rep not eps nil fm where
+    sym x = Sym x
 
-    Cut Nil _ -> Nil
-    Cut _ Nil -> Nil
-    Cut (Not Nil) x -> FMap ((),) (s x)
-    Cut x (Not Nil) -> FMap (,()) (s x)
+    alt Nil x = FMap Right x
+    alt x Nil = FMap Left x
+    alt x y = Alt x y
 
-    Cut (Eps x) y -> FMap (x,) (v y)
-    Cut x (Eps y) -> FMap (,y) (v x)
+    cut Nil _ = Nil
+    cut _ Nil = Nil
+    cut (Not Nil) x = FMap ((),) x
+    cut x (Not Nil) = FMap (,()) x
+    -- Cut Sym Sym would be useful.
 
-    Seq (Eps x) y -> FMap (x,) (s y)
-    Seq x (Eps y) -> FMap (,y) (s x)
-    Seq Nil _ -> Nil
-    Seq _ Nil -> Nil
-    Rep Nil -> Eps []
+    cut (Eps x) y = FMap (x,) (v y)
+    cut x (Eps y) = FMap (,y) (v x)
+    cut x y = Cut x y
+
+    seq (Eps x) y = FMap (x,) y
+    seq x (Eps y) = FMap (,y) x
+    seq Nil _ = Nil
+    seq _ Nil = Nil
+    seq x y = Seq x y
+
+    rep Nil = Eps []
     -- We've got a choice here.
-    Rep (Eps _) -> Eps []
-    -- Rep (Eps x) -> Eps [x,..]
+    rep (Eps _) = Eps []
+    -- Rep (Eps x) = Eps [x,..]
     -- We've got a choice here!
-    Rep (Rep a) -> FMap (:[]) $ Rep a
-    -- Rep (Rep a) -> Rep $ FMap (:[]) a
+    rep (Rep a) = FMap (:[]) $ Rep a
+    -- rep (Rep a) = Rep $ FMap (:[]) a
+    rep x = Rep x
 
     -- -- TODO: Figure out the type magic here.
     -- This can be pretty inefficient.
     -- Seq (Rep a) (Rep b) | _ a == b -> FMap (const ([],[])) $ Rep a
     -- Seq (Rep a) (Rep b) -> FMap (const ([],[])) $ Rep a
-    Not (Not x) -> FMap (const ()) (s x)
+    not (Not x) = FMap (const ()) x
+    not x = Not x
     -- catch all:
-    Sym x -> Sym x
-    Eps x -> Eps x
-    Nil -> Nil
-    FMap f (FMap g x) -> FMap (f . g) (s x)
-    FMap f x -> FMap f (s x)
-    Alt x y -> Alt (s x) (s y)
-    -- Cut Sym Sym would be useful.
-    Cut x y ->  Cut (s x) (s y)
-    Seq x y -> Seq (s x) (s y)
-    Rep x -> Rep (s x)
-    Not x -> Not (s x)
+    eps x = Eps x
+
+    nil = Nil
+
+    fm f (FMap g x) = FMap (f . g) x
+    fm f x = FMap f x
 -- simplify = foldRe1 simplify1
 
 -- type C2 a = Re a x -> Re a -> Re a
