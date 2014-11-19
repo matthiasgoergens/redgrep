@@ -1,8 +1,10 @@
-{-# LANGUAGE GADTs,TupleSections #-}
+{-# LANGUAGE GADTs,TupleSections,TemplateHaskell #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
 module Main where
+-- import Data.Foldable hiding (fold, concatMap, foldr, elem, foldl, mapM_)
 import Prelude hiding (sequence, mapM)
+import Data.List (sort)
 import Data.Monoid
 import qualified Data.Set as Set
 import Data.Ord
@@ -10,8 +12,11 @@ import Data.Typeable
 import Control.Applicative
 -- TODO: Look into lenses.
 import Test.QuickCheck
+import Test.QuickCheck.Function
+import Test.QuickCheck.All
+
 import Control.Arrow
--- import Data.Either.Combinators
+import Control.Monad
 
 
 data Re a x where
@@ -35,6 +40,40 @@ data Re a x where
     FMap :: (x -> y) -> Re a x -> Re a y
     deriving (Typeable)
 
+fold
+    :: forall a b x
+    .  (Maybe [a] -> b) -- Sym
+    -> (b -> b -> b) -- Alt
+    -> (b -> b -> b) -- Cut
+    -> (b -> b -> b) -- Seq
+    -> (b -> b) -- Rep
+    -> (b -> b) -- Not
+    -> b -- Eps (possible to do more?)
+    -> b -- Nil
+    -> (b -> b) -- FMap
+    -> Re a x -> b
+fold sym alt cut seq rep not eps nil fmap =
+    let h :: forall y. Re a y -> b
+        h re = case re of
+            Sym char -> sym char
+            Alt x y -> alt (h x) (h y)
+            Cut x y -> cut (h x) (h y)
+            Seq x y -> seq (h x) (h y)
+            Rep x -> rep (h x)
+            Not x -> not (h x)
+            Eps _ -> eps
+            Nil -> nil
+            FMap _ x -> fmap (h x)
+    in h
+
+size :: Re a x -> Int
+size = fold (const 1) p p p (1+) (1+) 1 1 (1+) where
+    p a b = a + 1 + b
+
+height :: Re a x -> Int
+height = fold (const 1) m m m (1+) (1+) 1 1 (1+) where
+    m a b = 1 + max a b
+
 -- Just for testing incomplete pattern match warning and GADTs.
 {-
 ttt :: Re a [x] -> Int
@@ -45,11 +84,25 @@ ttt Nil = 4
 ttt (Sym _) = 5 -- This doesn't always work.
 -}
 
+(.:) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
+(.:) f g a b = f (g a b)
+
 -- How to define Arbitrary instances?
-instance Arbitrary (Re Char Char) where
-    arbitrary = Sym <$> arbitrary
-    shrink (Sym s) = Sym <$> shrink s
-    shrink _ = []
+-- CoArbitrary via Show?
+instance (Arbitrary a, Applicative m, Monoid (m a), Arbitrary (m a)) => Arbitrary (Re a (m a)) where
+    arbitrary = oneof
+        [ FMap pure . Sym <$> arbitrary
+        , FMap (either id id) .: Alt <$> arbitrary <*> arbitrary 
+        , FMap (uncurry mappend) .: Cut <$> arbitrary <*> arbitrary
+        , FMap (uncurry mappend) .: Seq <$> arbitrary <*> arbitrary
+        , FMap mconcat . Rep <$> arbitrary
+        , FMap (const mempty) . Not <$> (arbitrary :: Gen (Re a (m a)))
+        , Eps <$> arbitrary
+        , pure Nil
+        -- , FMap . apply <$> arbitrary <*> arbitrary
+        ]
+    -- shrink (Sym s) = Sym <$> shrink s
+    -- shrink _ = []
 
 instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (x,y)) where
     arbitrary = elements [Cut, Seq] <*> arbitrary <*> arbitrary
@@ -75,7 +128,7 @@ instance Show c => Show (Re c x) where
         Not a -> "!" ++ show a
         Eps _ -> "ε"
         Nil -> "∅"
-        FMap _ a -> show a -- Not great.
+        FMap _ a -> "$" ++ show a -- Not great.
 
 -- Something wrong here.
 -- n r === does r accept the empty string?
@@ -102,8 +155,8 @@ n' (Eps x) = Just x
 n' Nil = Nothing
 n' (FMap f x) = fmap f (n' x)
 
-v' :: Re a x -> Re a x
-v' = maybe Nil Eps . n'
+v :: Re a x -> Re a x
+v = maybe Nil Eps . n'
 
 -- float up FMap?
 -- Existentials might do the trick.  Or, rather, necessary for something else.
@@ -120,17 +173,27 @@ a (Alt x y) = case (a x, a y) of
     (       x, FMap g y) -> FMap (mapRight  g) (Alt x y)
 -}
 
+prop_simplify :: Re Char String -> Bool
+prop_simplify re = descending . take 100 . map size $ iterate simplify re where
+    descending l = l == reverse (sort l)
 
-simplify,s :: Eq a => Re a x -> Re a x
-s = simplify
+
+simplify :: forall a x . Eq a => Re a x -> Re a x
 -- Lenses or boilerplate scrapping?
-simplify re = case re of
+simplify = s where
+  s :: forall y . Re a y -> Re a y
+  s re = case re of
     Alt Nil x -> FMap Right (s x)
     Alt x Nil -> FMap Left (s x)
+
     Cut Nil _ -> Nil
     Cut _ Nil -> Nil
     Cut (Not Nil) x -> FMap ((),) (s x)
     Cut x (Not Nil) -> FMap (,()) (s x)
+
+    Cut (Eps x) y -> FMap (x,) (v y)
+    Cut x (Eps y) -> FMap (,y) (v x)
+
     Seq (Eps x) y -> FMap (x,) (s y)
     Seq x (Eps y) -> FMap (,y) (s x)
     Seq Nil _ -> Nil
@@ -193,7 +256,7 @@ d c (Sym (Just as))
 d c (Alt a b) = Alt (d c a) (d c b)
 d c (Cut a b) = Cut (d c a) (d c b)
 -- This one grows.
-d c (Seq a b) = FMap (either id id) $ Seq (d c a) b `Alt` Seq (v' a) (d c b)
+d c (Seq a b) = FMap (either id id) $ Seq (d c a) b `Alt` Seq (v a) (d c b)
 -- This one grows.
 d c (Rep a) = FMap (uncurry (:)) $ Seq (d c a) (Rep a)
 d c (Not a) = Not (d c a)
@@ -299,7 +362,7 @@ instance Alternative (Re a) where
     many = Rep
 
 ds :: Eq a => a -> Re a x -> Re a x
-ds c = simplify . d c
+ds c = simplify . d c . simplify
 
 -- -- This should not be possible to define sensibly.
 instance Monad (Re a) where
@@ -346,8 +409,18 @@ dot = Sym Nothing
 pp :: Re Char [Char] -> IO ()
 pp = putStrLn . show
 
+prop_match_noincrease :: Re Char String -> String -> Bool
+prop_match_noincrease re s = descending $ map size $ matchn re s where
+    descending l = l == reverse (sort l)
+
+return []
+runTests = $quickCheckAll
+
 main :: IO ()
-main = do
+main = void $ do
+    runTests
+
+main' = do
     print $ match (sym "a") "a"
     print $ match (Rep (sym "a")) "aaaaaba"
     mapM_ pp $ matchn (Rep (sym "a")) "aaaaaba"
@@ -364,6 +437,11 @@ main = do
     print $ match' (many $ fmap (either id id) $ Alt Nil $ many $ Sym $ Just "a") "a"
     print $ next flapping
     print $ next $ Not $ str "ab"
+
+    let r = simplify $ many $ FMap (const 1) $ many $ Sym $ Just "a"
+    print $ map height $ matchn r "aaaaaaaaaa"
+    print $ map size $ matchn r "aaaaaaaaaa"
+    mapM_ print $ matchn r "aaaaaaaaaa"
 
     -- print $ match (Not (str "flapping")) "flapping"
     -- print $ match (dots `Seq` (Not $ str "flapping")) "flapping"
