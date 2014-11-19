@@ -101,8 +101,24 @@ instance (Arbitrary a, Applicative m, Monoid (m a), Arbitrary (m a)) => Arbitrar
         , pure Nil
         -- , FMap . apply <$> arbitrary <*> arbitrary
         ]
+    shrink = shrink'
     -- shrink (Sym s) = Sym <$> shrink s
     -- shrink _ = []
+
+shrink' :: forall a x . (Arbitrary a)  => Re a x -> [Re a x]
+shrink' (Sym x) = (Sym <$> shrink x) ++ [Nil]
+shrink' (Alt x y) = (FMap Left <$> shrink' x) ++ (FMap Right <$> shrink' y) ++ (Alt x <$> shrink' y) ++ (Alt <$> shrink' x <*> [y]) ++ [Nil]
+shrink' (Cut x y) = (Cut <$> shrink' x <*> [y]) ++ (Cut x <$> shrink' y) ++ [Nil]
+shrink' (Seq x y) = (Seq <$> shrink' x <*> [y]) ++ (Seq x <$> shrink' y) ++ [Nil]
+shrink' (Rep x) = (Rep <$> shrink' x) ++ [Nil]
+shrink' (Not x) = (Not <$> shrink' x) ++ [Nil]
+-- Can't do arbitrary x, yet.
+shrink' (Eps x) = [Nil]
+shrink' Nil = []
+-- How to shrink the function?
+shrink' (FMap f (FMap g x)) = FMap (f . g) <$> shrink' x
+shrink' (FMap f x) = FMap f <$> shrink' x
+
 
 instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (x,y)) where
     arbitrary = elements [Cut, Seq] <*> arbitrary <*> arbitrary
@@ -116,19 +132,19 @@ instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (E
 -- deriving instance Eq (ReX a x)
 -- deriving instance Ord (ReX a x)
 
-instance Show c => Show (Re c x) where
-    show re = case re of
-        Sym Nothing -> "."
-        Sym (Just [x]) -> show x
-        Sym (Just xs) -> "[" ++ concatMap show xs ++ "]"
-        Alt a b -> show a ++ "|" ++ show b
-        Cut a b -> show a ++ "&" ++ show b
-        Seq a b -> show a ++ show b
-        Rep a -> show a ++ "*"
-        Not a -> "!" ++ show a
-        Eps _ -> "ε"
-        Nil -> "∅"
-        FMap _ a -> "$" ++ show a -- Not great.
+instance Show Char => Show (Re Char x) where
+    showsPrec d re = case re of
+        Sym Nothing -> showsPrec d "."
+        Sym (Just [x]) -> showsPrec d x
+        Sym (Just xs) -> showString ("[" ++ init (tail $ show xs) ++ "]")
+        Alt a b -> showParen (d > 5) $ showsPrec 6 a . showString "|" . showsPrec 6 b
+        Cut a b -> showParen (d > 6) $ showsPrec 7 a . showString "&" . showsPrec 7 b
+        Seq a b -> showParen (d > 10) $ showsPrec 11 a . showsPrec 11 b
+        Rep a -> showParen (d > 9) $ showsPrec 10 a . showString "*"
+        Not a -> showParen (d > 8) $ showString "!" . showsPrec 9 a
+        Eps _ -> showString "ε"
+        Nil -> showString "∅"
+        FMap _ a -> showString "$" . showsPrec d a -- Not great.
 
 -- Something wrong here.
 -- n r === does r accept the empty string?
