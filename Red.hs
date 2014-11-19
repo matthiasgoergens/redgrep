@@ -180,6 +180,11 @@ foldRe1 s =
     in f
 -}
 
+-- d takes the derivative.  The heart of the matcher!
+
+-- We have to prove that a derivative doesn't grow the regex
+-- beyond some measure.
+
 d :: Eq a => a -> Re a x -> Re a x
 d c (Sym Nothing) = Eps c
 d c (Sym (Just as))
@@ -187,12 +192,20 @@ d c (Sym (Just as))
     | otherwise = Nil
 d c (Alt a b) = Alt (d c a) (d c b)
 d c (Cut a b) = Cut (d c a) (d c b)
+-- This one grows.
 d c (Seq a b) = FMap (either id id) $ Seq (d c a) b `Alt` Seq (v' a) (d c b)
+-- This one grows.
 d c (Rep a) = FMap (uncurry (:)) $ Seq (d c a) (Rep a)
 d c (Not a) = Not (d c a)
 d _ (Eps _) = Nil
 d _ Nil = Nil
 d c (FMap f x) = FMap f (d c x)
+
+-- So, let's concentrate our attention on Rep and Seq, the two main culprits.
+-- Everything else looks intuitively, like it wouldn't change some measure
+-- of complexity. (They mostly just commute with d.)
+
+
 
 -- Pass to float up FMaps? --- especially needed for minimization.
 
