@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs,TupleSections,TemplateHaskell #-}
+{-# LANGUAGE GADTs,TupleSections,TemplateHaskell,ViewPatterns #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
 module Main where
@@ -6,6 +6,7 @@ module Main where
 import Prelude hiding (sequence, mapM)
 import Data.List (sort)
 import Data.Monoid
+import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Ord
 import Data.Typeable
@@ -41,6 +42,45 @@ data Re a x where
     Nil :: Re a x
     FMap :: (x -> y) -> Re a x -> Re a y
     deriving (Typeable)
+
+same :: forall a x y . (Eq a) => Re a x -> Re a y -> Maybe (Re a (x,y))
+same a b = floatFMap a # floatFMap b where
+    (#) :: forall x y . Re a x -> Re a y -> Maybe (Re a (x,y))
+    (Sym a)   # (Sym x) | a == x = Just $ FMap (id&&&id) $ Sym a
+    (Alt a b) # (Alt x y) = FMap (either (Left *** Left) (Right *** Right)) .: Alt <$> (a # x) <*> (b # y)
+    (Cut a b) # (Cut x y) = FMap r .: Cut <$> (a # x) <*> (b # y)
+    (Seq a b) # (Seq x y) = FMap r .: Seq <$> (a # x) <*> (b # y)
+    (Rep a)   # (Rep x)   = FMap unzip . Rep <$> (a # x)
+    (Not a)   # (Not x)   = FMap (const ((),())) . Not <$> (a # x)
+    (Eps a)   # (Eps x)   = Just $ Eps (a, x)
+    Nil       # Nil       = Just Nil
+    (FMap f x) # (FMap g y) = FMap (f *** g) <$> (x # y)
+    _ # _ = Nothing
+
+    r ((a,x),(b,y)) = ((a,b),(x,y))
+
+prop_same :: Re Char [Char] -> Bool
+prop_same re = isJust (same re re)
+
+prop_same_fm :: Re Char [Char] -> Bool
+prop_same_fm (floatFMap -> re) = isJust (same re re)
+
+prop_same_simplify :: Re Char [Char] -> Bool
+prop_same_simplify (simplify -> re) = isJust (same re re)
+
+compareStructure :: forall a x y . Eq a => Re a x -> Re a y -> Bool
+compareStructure a b = floatFMap a # floatFMap b where
+    (#) :: forall x y . Re a x -> Re a y -> Bool
+    (Sym a)   # (Sym x) = a == x
+    (Alt a b) # (Alt x y) = a # x && b # y
+    (Cut a b) # (Cut x y) = a # x && b # y
+    (Seq a b) # (Seq x y) = a # x && b # y
+    (Rep a)   # (Rep x)   = a # x
+    (Not a)   # (Not x)   = a # x
+    (Eps _)   # (Eps _)   = True
+    Nil       # Nil       = True
+    (FMap _ x) # (FMap _ y) = x # y
+    _ # _ = False
 
 floatFMap :: Re a x -> Re a x
 floatFMap = fold' Sym alt cut seq rep not Eps Nil fmap where
@@ -168,14 +208,14 @@ ttt (Sym _) = 5 -- This doesn't always work.
 
 -- How to define Arbitrary instances?
 -- CoArbitrary via Show?
-instance (Arbitrary a, Applicative m, Monoid (m a), Arbitrary (m a)) => Arbitrary (Re a (m a)) where
+instance (Arbitrary a, Applicative m, Monoid (m a), Arbitrary (m a), Eq a) => Arbitrary (Re a (m a)) where
     arbitrary = sized $ \n ->
         let simple = [ FMap pure . Sym <$> arbitrary
                      , Eps <$> arbitrary
                      , pure Nil ]
             r1 = resize (n-1)
             r2 = resize (n `div` 2)
-            complex = [ r2 $ FMap (either id id) .: Alt <$> arbitrary <*> arbitrary 
+            complex = [ r2 $ FMap (either id id) .: Alt <$> arbitrary <*> arbitrary
                       , r2 $ FMap (uncurry mappend) .: Cut <$> arbitrary <*> arbitrary
                       , r2 $ FMap (uncurry mappend) .: Seq <$> arbitrary <*> arbitrary
                       , r1 $ FMap mconcat . Rep <$> arbitrary
@@ -185,11 +225,11 @@ instance (Arbitrary a, Applicative m, Monoid (m a), Arbitrary (m a)) => Arbitrar
         in if n <= 0
         then oneof simple
         else oneof $ simple ++ complex
-        
+
     shrink re = (let f = floatFMap re in if not (topFMap re) then (floatFMap re:) else id)
               . (let s = simplify re in if size s < size re then (s:) else id)
               $ shrink' re where
-    
+
     -- shrink (Sym s) = Sym <$> shrink s
     -- shrink _ = []
 
@@ -229,6 +269,8 @@ instance Show Char => Show (Re Char x) where
         Cut a b -> showParen (d > 6) $ showsPrec 7 a . showString "&" . showsPrec 7 b
         Seq a b -> showParen (d > 10) $ showsPrec 11 a . showsPrec 11 b
         Rep a -> showParen (d > 9) $ showsPrec 10 a . showString "*"
+        Not (Eps _) -> showParen (d > 8) $ showString ".+"
+        Not Nil -> showParen (d > 8) $ showString ".*"
         Not a -> showParen (d > 8) $ showString "!" . showsPrec 9 a
         Eps _ -> showString "ε"
         Nil -> showString "∅"
@@ -282,13 +324,17 @@ prop_simplify_notBigger re = descending . take 100 . map size $ iterate simplify
     descending l = l == reverse (sort l)
 
 
-simplify :: forall a x . Re a x -> Re a x
+simplify :: forall a x . Eq a => Re a x -> Re a x
 -- Lenses or boilerplate scrapping?
 simplify = (!!20) . iterate (floatFMap . fold' sym alt cut seq rep not eps nil fm)  where
     sym x = Sym x
 
     alt Nil x = FMap Right x
     alt x Nil = FMap Left x
+    alt x (Eps _) | n x = FMap Left x
+    -- Dubious, not left-biased.
+    alt (Eps _) y | n y = FMap Right y
+    alt x y | compareStructure x y = Left <$> x
     alt x y = Alt x y
 
     cut Nil _ = Nil
@@ -300,10 +346,13 @@ simplify = (!!20) . iterate (floatFMap . fold' sym alt cut seq rep not eps nil f
     cut x y = Cut x y
     -- Cut Sym Sym would be useful.
 
+    seq :: forall a x y . Eq a => Re a x -> Re a y -> Re a (x,y)
     seq (Eps x) y = FMap (x,) y
     seq x (Eps y) = FMap (,y) x
     seq Nil _ = Nil
     seq _ Nil = Nil
+    -- Dubious..
+    seq x (Rep y) | compareStructure x y = maybe (Seq x) (FMap . (,)) (n' x) (Rep y)
     seq x y = Seq x y
 
     rep Nil = Eps []
@@ -445,7 +494,7 @@ fromList = Set . Right . Set.fromList
 instance Ord a => Monoid (Set a) where
     mempty = Set $ Right mempty
     mappend = union
-    
+
 -- empty :: Set a
 -- empty = Right empty
 
@@ -456,7 +505,7 @@ instance Functor (Re a) where
 
 -- Ha, this is almost trivial!
 instance Applicative (Re a) where
-    pure = Eps 
+    pure = Eps
     f <*> a = FMap (uncurry ($)) $ Seq f a
     a <* b = FMap fst $ Seq a b
     a *> b = FMap snd $ Seq a b
@@ -517,9 +566,11 @@ pp = putStrLn . show
 prop_float_noincrease :: Re Char String -> Bool
 prop_float_noincrease re = size (floatFMap re) <= size re
 
-prop_match_noincrease :: Re Char String -> String -> Bool
-prop_match_noincrease re s = descending $ map size $ matchn re s where
+prop_match_noincrease :: Re Char String -> String -> Property
+prop_match_noincrease re s = counterexample (unlines $ "REs:" : map show matches) $
+    descending $ map size $ matches where
     descending l = l == reverse (sort l)
+    matches = matchn re s
 
 return []
 -- runTests = $verboseCheckAll
