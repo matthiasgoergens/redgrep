@@ -338,6 +338,8 @@ prop_simplify_notBigger re = descending . take 100 . map size $ iterate simplify
 prop_same_simplify :: Re Char [Char] -> Bool
 prop_same_simplify (simplify -> re) = isJust (same re re)
 
+-- TODO: correctness of simplify.
+-- Probably via a non-simplify ds
 simplify :: forall a x . Eq a => Re a x -> Re a x
 -- Lenses or boilerplate scrapping?
 simplify = (!!20) . iterate (floatFMap . fold' sym alt cut seq rep not eps nil fm)  where
@@ -599,22 +601,25 @@ prop_float_noincrease :: Re Char String -> Bool
 prop_float_noincrease re = size (floatFMap re) <= size re
 
 prop_match_noincrease :: Re Char String -> String -> Property
-prop_match_noincrease re s = counterexample (unlines $ "REs:" : map show matches) $
+prop_match_noincrease re' s = counterexample (unlines $ "REs:" : map show matches) $
     descending $ map size $ matches where
     descending l = l == reverse (sort l)
     matches = matchn re s
+    re = simplify re'
 
 prop_match_noStarIncrease :: Re Char String -> String -> Property
-prop_match_noStarIncrease re s = counterexample (unlines $ "REs:" : map show matches) $
+prop_match_noStarIncrease re' s = counterexample (unlines $ "REs:" : map show matches) $
     descending $ map starHeight $ matches where
     descending l = l == reverse (sort l)
     matches = matchn re s
+    re = simplify re'
 
 prop_match_no_overstar :: Re Char String -> String -> Property
-prop_match_no_overstar re s = counterexample (unlines $ ("REs : " ++ show maxStar): map show matches) $
-    all (\re' -> maxStar >= size re') $ matches where
+prop_match_no_overstar re' s = counterexample (unlines $ ("REs : " ++ show maxStar): map show matches) $
+    all (\re_ -> maxStar >= size re_) $ matches where
     matches = matchn re s
-    maxStar = maxStarSize re
+    maxStar = min (maxStarSize re) (maxStarSize re')
+    re = simplify re'
 
 -- This grows like crazy.
 -- $(!((.*)(([]|ε)(.+)*)|(.*)*))
