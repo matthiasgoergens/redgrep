@@ -65,9 +65,6 @@ prop_same re = isJust (same re re)
 prop_same_fm :: Re Char [Char] -> Bool
 prop_same_fm (floatFMap -> re) = isJust (same re re)
 
-prop_same_simplify :: Re Char [Char] -> Bool
-prop_same_simplify (simplify -> re) = isJust (same re re)
-
 compareStructure :: forall a x y . Eq a => Re a x -> Re a y -> Bool
 compareStructure a b = floatFMap a # floatFMap b where
     (#) :: forall x y . Re a x -> Re a y -> Bool
@@ -167,17 +164,35 @@ fold sym alt cut seq rep not eps nil fmap =
             FMap _ x -> fmap (h x)
     in h
 
+(.:) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
+(.:) f g a b = f (g a b) 
+
 size :: Re a x -> Int
 size = fold (const 1) p p p (1+) (1+) 1 1 (1+) where
     p a b = a + 1 + b
+
+statesDFA :: Re a x -> Int
+statesDFA = fold (const 1) (+) (*) (*) id id 0 0 id
+
+-- statesNnFA :: Re a x -> Int
+-- statesNnFA = fold (const 1) (+) (+) (*) id id 0 0 id
 
 height :: Re a x -> Int
 height = fold (const 1) m m m (1+) (1+) 1 1 (1+) where
     m a b = 1 + max a b
 
+starHeight :: Re a x -> Int
+starHeight = fold (const 0) max max max (1+) id 0 0 id
+
+-- each star might double the size of the underlying,
+-- because d a .* = Seq (d a) a*
+maxStarSize :: Re a x -> Int
+maxStarSize = fold (const 1) p p p star (1+) 1 1 (1+) where
+    p a b = a + 1 + b
+    star = (\s -> 1 + (1 + s) + (1 + s))
+
 prop_float_finite :: Re Char [Char] -> Bool
 prop_float_finite re = length (show $ floatFMap re) >= 0
-
 
 prop_floatFMapS :: Re Char [Char] -> Bool
 prop_floatFMapS re = topFMap $ floatFMap re
@@ -202,9 +217,6 @@ ttt (Rep _) = 2
 ttt Nil = 4
 ttt (Sym _) = 5 -- This doesn't always work.
 -}
-
-(.:) :: (c -> d) -> (a -> b -> c) -> a -> b -> d
-(.:) f g a b = f (g a b)
 
 -- How to define Arbitrary instances?
 -- CoArbitrary via Show?
@@ -262,7 +274,7 @@ instance (Arbitrary (Re Char x), Arbitrary (Re Char y)) => Arbitrary (Re Char (E
 
 instance Show Char => Show (Re Char x) where
     showsPrec d re = case re of
-        Sym Nothing -> showsPrec d "."
+        Sym Nothing -> showString "."
         Sym (Just [x]) -> showsPrec d x
         Sym (Just xs) -> showString ("[" ++ init (tail $ show xs) ++ "]")
         Alt a b -> showParen (d > 5) $ showsPrec 6 a . showString "|" . showsPrec 6 b
@@ -323,26 +335,41 @@ prop_simplify_notBigger :: Re Char String -> Bool
 prop_simplify_notBigger re = descending . take 100 . map size $ iterate simplify re where
     descending l = l == reverse (sort l)
 
+prop_same_simplify :: Re Char [Char] -> Bool
+prop_same_simplify (simplify -> re) = isJust (same re re)
 
 simplify :: forall a x . Eq a => Re a x -> Re a x
 -- Lenses or boilerplate scrapping?
 simplify = (!!20) . iterate (floatFMap . fold' sym alt cut seq rep not eps nil fm)  where
+    sym (Just []) = Nil
     sym x = Sym x
 
     alt Nil x = FMap Right x
+    alt (Not Nil) _ = FMap Left $ Not Nil
+    -- Not left-biased.
+    alt _ (Not Nil) = FMap Right $ Not Nil
     alt x Nil = FMap Left x
     alt x (Eps _) | n x = FMap Left x
     -- Dubious, not left-biased.
     alt (Eps _) y | n y = FMap Right y
     alt x y | compareStructure x y = Left <$> x
+    -- Might need to repeat?
+    alt (Alt x y) z = FMap f $ Alt x (Alt y z) where
+        f (Left x) = Left (Left x)
+        f (Right (Left y)) = Left (Right y)
+        f (Right (Right z)) = Right z
     alt x y = Alt x y
 
     cut Nil _ = Nil
     cut _ Nil = Nil
     cut (Not Nil) x = FMap ((),) x
     cut x (Not Nil) = FMap (,()) x
-    cut (Eps x) y = FMap (x,) (v y)
-    cut x (Eps y) = FMap (,y) (v x)
+    cut (Eps x) y = maybe Nil (Eps . (x,)) (n' y)
+    -- cut (Eps x) y = FMap (x,) (v y)
+    cut x (Eps y) = maybe Nil (Eps . (,y)) (n' x)
+    -- cut x (Eps y) = FMap (,y) (v x)
+    -- Might need to repeat?
+    cut (Cut x y) z = FMap (\(a,(b,c)) -> ((a,b),c)) $ Cut x (Cut y z)
     cut x y = Cut x y
     -- Cut Sym Sym would be useful.
 
@@ -353,6 +380,8 @@ simplify = (!!20) . iterate (floatFMap . fold' sym alt cut seq rep not eps nil f
     seq _ Nil = Nil
     -- Dubious..
     seq x (Rep y) | compareStructure x y = maybe (Seq x) (FMap . (,)) (n' x) (Rep y)
+    -- Might need to repeat?
+    seq (Seq x y) z = FMap (\(a,(b,c)) -> ((a,b),c) ) $ Seq x (Seq y z)
     seq x y = Seq x y
 
     rep Nil = Eps []
@@ -362,6 +391,8 @@ simplify = (!!20) . iterate (floatFMap . fold' sym alt cut seq rep not eps nil f
     -- We've got a choice here!
     rep (Rep a) = FMap (:[]) $ Rep a
     -- rep (Rep a) = Rep $ FMap (:[]) a
+    -- This would be valid, if we weren't parsing:
+    -- rep (Sym Nothing) = Rep $ Not $ Nil
     rep x = Rep x
 
     -- -- TODO: Figure out the type magic here.
@@ -377,6 +408,7 @@ simplify = (!!20) . iterate (floatFMap . fold' sym alt cut seq rep not eps nil f
 
     fm f (FMap g x) = FMap (f . g) x
     fm f x = FMap f x
+
 -- simplify = foldRe1 simplify1
 
 -- type C2 a = Re a x -> Re a -> Re a
@@ -571,6 +603,22 @@ prop_match_noincrease re s = counterexample (unlines $ "REs:" : map show matches
     descending $ map size $ matches where
     descending l = l == reverse (sort l)
     matches = matchn re s
+
+prop_match_noStarIncrease :: Re Char String -> String -> Property
+prop_match_noStarIncrease re s = counterexample (unlines $ "REs:" : map show matches) $
+    descending $ map starHeight $ matches where
+    descending l = l == reverse (sort l)
+    matches = matchn re s
+
+prop_match_no_overstar :: Re Char String -> String -> Property
+prop_match_no_overstar re s = counterexample (unlines $ ("REs : " ++ show maxStar): map show matches) $
+    all (\re' -> maxStar >= size re') $ matches where
+    matches = matchn re s
+    maxStar = maxStarSize re
+
+-- This grows like crazy.
+-- $(!((.*)(([]|ε)(.+)*)|(.*)*))
+-- "\138\239\173\183\t\221_{4\211,\178\&3]dI\SI\US\vC\248@\DC3?1"
 
 return []
 -- runTests = $verboseCheckAll
