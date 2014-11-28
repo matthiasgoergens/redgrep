@@ -279,8 +279,8 @@ instance Show Char => Show (Re Char x) where
         Sym (Just xs) -> showString ("[" ++ init (tail $ show xs) ++ "]")
         Alt a b -> showParen (d > 5) $ showsPrec 6 a . showString "|" . showsPrec 6 b
         Cut a b -> showParen (d > 6) $ showsPrec 7 a . showString "&" . showsPrec 7 b
-        Seq a b -> showParen (d > 10) $ showsPrec 11 a . showsPrec 11 b
-        Rep a -> showParen (d > 9) $ showsPrec 10 a . showString "*"
+        Seq a b -> showParen (d > 9) $ showsPrec 10 a . showsPrec 10 b
+        Rep a -> showParen (d > 10) $ showsPrec 11 a . showString "*"
         Not (Eps _) -> showParen (d > 8) $ showString ".+"
         Not Nil -> showParen (d > 8) $ showString ".*"
         Not a -> showParen (d > 8) $ showString "!" . showsPrec 9 a
