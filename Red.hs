@@ -288,7 +288,7 @@ instance Show Char => Show (Re Char x) where
         Nil -> showString "∅"
         FMap _ a -> showParen (d > 8) $ showString "$" . showsPrec 9 a -- Not great.
 
--- Something wrong here.
+-- Something wrong here. (Later: Why? How?)
 -- n r === does r accept the empty string?
 n :: Re a x -> Bool
 n (Sym _) = False
