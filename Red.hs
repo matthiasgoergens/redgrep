@@ -626,7 +626,7 @@ peelFMap (FMap _ re) = re
 
 
 prop_match_no_overstar :: Re Char String -> String -> Property
-prop_match_no_overstar re' s = counterexample (unlines $ ("REs : " ++ show maxStar): map show matches) $
+prop_match_no_overstar re' s = counterexample (unlines $ ("REs: maxStar " ++ show maxStar): map show matches) $
     all (\re_ -> maxStar >= size re_) $ matches where
     matches = matchn re s
     maxStar = min (maxStarSize re) (maxStarSize re')
