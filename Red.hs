@@ -34,6 +34,7 @@ data Re a x where
     Seq :: Re a x -> Re a y -> Re a (x,y)
     -- Repetition, Kleene Star *
     Rep :: Re a x -> Re a [x]
+    -- Plus :: Re a x -> Re a (NonEmptyList x)
     -- Complement
     Not :: Re a x -> Re a ()
     -- Match empty string
