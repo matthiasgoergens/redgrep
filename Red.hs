@@ -615,6 +615,16 @@ prop_match_noStarIncrease re' s = counterexample (unlines $ "REs:" : map show ma
     matches = matchn re s
     re = simplify re'
 
+prop_star_increase :: Re Char String -> Bool
+prop_star_increase re' = (size re <= maxStarSize re) && (size re' <= maxStarSize re') where
+    re = simplify re'
+
+-- How to type this?
+-- peelFMap :: forall a x . Re a x -> forall y . Re a y
+peelFMap (FMap _ re) = re
+-- peelFMap re = re
+
+
 prop_match_no_overstar :: Re Char String -> String -> Property
 prop_match_no_overstar re' s = counterexample (unlines $ ("REs : " ++ show maxStar): map show matches) $
     all (\re_ -> maxStar >= size re_) $ matches where
