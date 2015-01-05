@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs,TupleSections,TemplateHaskell,ViewPatterns #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
-module Main where
+module Red where
 -- import Data.Foldable hiding (fold, concatMap, foldr, elem, foldl, mapM_)
 import Prelude hiding (sequence, mapM)
 import Data.List (sort)
@@ -20,6 +20,8 @@ import Control.Arrow
 import Control.Monad
 
 import Debug.Trace (trace)
+import Control.Lens hiding (elements)
+import Control.Lens.Prism
 
 
 data Re a x where
@@ -43,6 +45,82 @@ data Re a x where
     Nil :: Re a x
     FMap :: (x -> y) -> Re a x -> Re a y
     deriving (Typeable)
+
+-- aSym :: Re a x -> Maybe (Maybe [x])
+aSym :: Re a x -> Maybe (Maybe [a])
+aSym (Sym x) = Just x
+aSym _ = Nothing
+
+anEps :: Re a x -> Maybe x
+anEps (Eps x) = Just x
+anEps _ = Nothing
+
+-- _Sym :: Prism' (Maybe [a]) (Re a x)
+-- _Sym = prism' aSym Sym
+
+-- _Eps :: Prism' (Re a x) x
+-- _Eps = prism' Eps anEps
+
+-- testN = Not testN
+-- testRep = Rep testRep
+
+type PT a x = ParseTree a x
+data ParseTree a x where
+    SymT :: Maybe [a] -> PT a a
+    AltT :: Either (PT a x) (PT a y) -> PT a (Either x y)
+    CutT :: PT a x -> PT a y -> PT a (x, y)
+    SeqT :: PT a x -> PT a y -> PT a (x, y)
+    -- Hmm, we don't guarantee that elements of the list all have the same structure.
+    RepT :: [PT a x] -> PT a [x]
+    NotT :: PT a x -> PT a ()
+    EpsT :: x -> PT a x
+    -- Necessary?
+    NilT :: PT a x
+    FMapT :: (x -> y) -> PT a x -> PT a y
+    deriving (Typeable)
+
+
+-- Need Re a x with a zipper (actually with multiple holes)
+-- d, n
+
+--d_ :: Eq a => a -> Re' a x -> Re' a x
+--d_ = d where
+--    d :: Eq a => a -> Re' a x -> Re' a x
+--    d c (Sym' Nothing) = Eps' c
+--    d c (Sym' (Just as))
+--        | c `elem` as = Eps c
+--        | otherwise = Nil
+--    d c (Alt a b) = Alt (d c a) (d c b)
+--    d c (Cut a b) = Cut (d c a) (d c b)
+--    -- This one grows.
+--    d c (Seq a b) = Seq' (d c a) b `Alt` Seq (v a) (d c b)
+--    -- This one grows.
+--    d c (Rep a) = FMap (uncurry (:)) $ Seq (d c a) (Rep a)
+--    -- Something like:
+--    -- d c (Rep a b) = uncurry Rep (d_ c a b) `Alt` Seq (v b) (Alt Eps (Rep (a++b)))
+--    d c (Not a) = Not (d c a)
+--    d _ (Eps _) = Nil
+--    d _ Nil = Nil
+--    d c (FMap f x) = FMap f (d c x)
+--
+--    n' :: Re a x -> Maybe x
+--    n' (Sym _) = Nothing
+--    n' (Alt a b) = (Left <$> n' a) <|> (Right <$> n' b)
+--    n' (Cut a b) = liftA2 (,) (n' a) (n' b)
+--    n' (Seq a b) = liftA2 (,) (n' a) (n' b)
+--    -- Could also just always give []
+--    n' (Rep a) = fmap (:[]) (n' a) <|> Just []
+--    n' (Not a) = maybe (Just ()) (const Nothing) $ n' a
+--    n' (Eps x) = Just x
+--    n' Nil = Nothing
+--    n' (FMap f x) = fmap f (n' x)
+--
+--    v :: Re a x -> Re a x
+--    v = maybe Nil Eps . n'
+
+
+
+
 
 same :: forall a x y . (Eq a) => Re a x -> Re a y -> Maybe (Re a (x,y))
 same a b = floatFMap a # floatFMap b where
@@ -621,7 +699,7 @@ prop_star_increase re' = (size re <= maxStarSize re) && (size re' <= maxStarSize
 
 -- How to type this?
 -- peelFMap :: forall a x . Re a x -> forall y . Re a y
-peelFMap (FMap _ re) = re
+-- peelFMap (FMap _ re) = re
 -- peelFMap re = re
 
 
