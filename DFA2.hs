@@ -23,23 +23,29 @@ import Debug.Trace (trace)
 -- import Control.Lens hiding (elements)
 -- import Control.Lens.Prism
 
--- -- iDense representation.
+-- -- Dense representation.
 -- We actually don't need the contrustors, or do we?
-data Sym f a = SymT Bool
+data Sym a where
+    SymT :: Bool -> Sym Bool
     deriving (Typeable)
-data Alt f x y = AltT (f x) (f y)
+data Alt x y where
+    AltT :: x -> y -> Alt x y
     deriving (Typeable)
-data Cut f x y = CutT (f x) (f y)
+data Cut x y where
+     CutT :: x -> y -> Cut x y
     deriving (Typeable)
-data Seq f x y = SeqT (f x) (f y)
+data Seq x y where
+    SeqT :: x -> y -> Seq x y
     deriving (Typeable)
-data Not f x = NotT (f x)
+data Not x where
+    NotT :: x -> Not x
     deriving (Typeable)
-data Rep f x = RepT (f x)
+data Rep x where
+    RepT :: x -> Rep x
     deriving (Typeable)
-data Eps f x = EpsT
+data Eps x = EpsT
     deriving (Typeable)
-data Nil f x = NilT
+data Nil x = NilT
     deriving (Typeable)
 
 {-
@@ -90,19 +96,20 @@ data Re a x where
 
 -- This seems like boiler plate.
 pass :: Ord a => Re a x -> a -> x -> x
-pass (Sym _) a (SymT False) = SymT False
-pass (Sym Nothing) a (SymT True) = SymT True
-pass (Sym (Just l)) a (SymT True) = SymT $ a `elem` l
+pass (Sym x) a (SymT x') = SymT $ (pass' x a) x' where
+ pass' _ a False = False
+ pass' Nothing a True = True
+ pass' (Just l) a True = a `elem` l
 
-pass (Alt x y) a (AltT x' y') = AltT (pass x a <$> x') (pass y a <$> y')
+pass (Alt x y) a (AltT x' y') = AltT (pass x a x') (pass y a y')
 
-pass (Cut x y) a (CutT x' y') = CutT (pass x a <$> x') (pass y a <$> y')
+pass (Cut x y) a (CutT x' y') = CutT (pass x a x') (pass y a y')
 
-pass (Seq x y) a (SeqT x' y') = SeqT (pass x a <$> x') (pass y a <$> y')
+pass (Seq x y) a (SeqT x' y') = SeqT (pass x a x') (pass y a y')
 
-pass (Rep x) a (RepT x') = RepT $ pass x a <$> x'
+pass (Rep x) a (RepT x') = RepT $ pass x a x'
 
-pass (Not x) a (NotT x') = NotT $ pass x a <$> x'
+pass (Not x) a (NotT x') = NotT $ pass x a x'
 
 pass (Eps x) a _ = EpsT
 
@@ -140,6 +147,19 @@ step (Sym _) new (SymT old) = (SymT new, old)
 step (Alt x y) new (AltT x' y') = let (x'', oldX) = step x new x'
                                       (y'', oldY) = step y new y'
                                   in (AltT x'' y'', oldX || oldY)
-step s@(Seq x y) new s'@(SeqT x' y') = -- let SeqT x' y' = (if add then addFirst s s' else s') in
-    undefined
+step (Seq x y) new (SeqT x' y') =
+    let (x_, newx) = step x new x'
+        (y_, newy) = step y newx y'
+    in (SeqT x_ y_, newy)
+step (Cut x y) new (CutT x' y') = let (x'', oldX) = step x new x'
+                                      (y'', oldY) = step y new y'
+                                  in (CutT x'' y'', oldX && oldY)
+step (Not x) new (NotT x') = NotT *** not $ step x new x'
+-- Rep x = Eps `Alt` Seq x (Reps x)
+-- but, avoid infinite regress..
+step (Rep x) new (RepT x') =
+    let (x_, new_) = step x new x'
+    in (RepT x_, new || new_)
+step (Eps _) new EpsT = (EpsT, new)
+step Nil new NilT = (NilT, False) -- ?
 
