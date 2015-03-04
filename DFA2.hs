@@ -25,9 +25,20 @@ import Debug.Trace (trace)
 
 -- -- Dense representation.
 -- We actually don't need the contrustors, or do we?
-data Sym a where
-    SymT :: Bool -> Sym Bool
+data Sym where
+    SymT :: Sym Bool
     deriving (Typeable)
+
+-- B = Boolean bearing.
+data SymB a where
+    SymTB :: Bool -> Sym Bool
+    deriving (Typeable)
+
+-- V for value-bearing.
+data SymV a where
+    SymTV :: Bool -> SymV (Maybe a)
+    deriving (Typeable)
+
 data Alt x y where
     AltT :: x -> y -> Alt x y
     deriving (Typeable)
@@ -47,6 +58,8 @@ data Eps x = EpsT
     deriving (Typeable)
 data Nil x = NilT
     deriving (Typeable)
+
+
 
 {-
 -- -- Sparse representation.
@@ -93,6 +106,13 @@ data Re a x where
     -- -- Do we need something like the lens trick?
     -- FMap :: (x -> y) -> Re a x -> Re a (FMap x y)
     deriving (Typeable)
+
+-- -- Funny enough, pass (later) works, but pass' doesn't type-check.
+-- -- even though we never really look at the first argument!
+-- pass' a (AltT x' y') = AltT (pass' a x') (pass' a y')
+-- pass' a (CutT x' y') = CutT (pass' a x') (pass' a y')
+-- pass' a (SeqT x' y') = SeqT (pass' a x') (pass' a y')
+
 
 -- This seems like boiler plate.
 pass :: Ord a => Re a x -> a -> x -> x
