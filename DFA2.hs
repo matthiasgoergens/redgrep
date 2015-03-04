@@ -42,7 +42,7 @@ data Req a f x where
     -- Alternative, |
     AltQ :: Req a f x -> Req a f y -> Req a f (Alt_ a x y)
 
-f :: Eq a => a -> Req a BoolBefore (x a) -> x a -> Req a BoolAfter (x a)
+f :: Eq a => a -> Req a BoolBefore (x c) -> x a -> Req a BoolAfter (x c)
 f a (SymQ (BoolBefore True)) (Sym (Just l)) | elem a l = SymQ (BoolAfter True)
 -- f a (AltQ x' y') (Alt_ x y) = undefined -- AltQ (f a x' x) (f a y' y) -- AltX (f x x') (f y y')
 
