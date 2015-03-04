@@ -23,6 +23,30 @@ import Debug.Trace (trace)
 -- import Control.Lens hiding (elements)
 -- import Control.Lens.Prism
 
+data Alt_ a x y where
+    Alt_ :: x a -> y a -> Alt_ a (x a) (y a)
+    deriving (Typeable)
+
+-- xxx :: Alt_ Char (Sym Char) (Sym Char)
+xxx = Alt_ (Sym Nothing) (Sym Nothing)
+yyy :: Req Char BoolBefore (Alt_ Char x (Sym Char))
+yyy = AltQ undefined zzz
+
+zzz :: Req Char BoolBefore (Sym Char)
+zzz = SymQ (BoolBefore True)
+
+data Req a f x where
+    -- Ranges of letters.  Nothing stands for .
+    -- TODO: Add character classes later.
+    SymQ :: f a -> Req a f (Sym a)
+    -- Alternative, |
+    AltQ :: Req a f x -> Req a f y -> Req a f (Alt_ a x y)
+
+f :: Eq a => a -> Req a BoolBefore (x a) -> x a -> Req a BoolAfter (x a)
+f a (SymQ (BoolBefore True)) (Sym (Just l)) | elem a l = SymQ (BoolAfter True)
+-- f a (AltQ x' y') (Alt_ x y) = undefined -- AltQ (f a x' x) (f a y' y) -- AltX (f x x') (f y y')
+
+
 data Sym a where
     Sym :: Maybe [a] -> Sym a
     deriving (Typeable, Show, Eq, Ord)
@@ -76,11 +100,11 @@ data Re f x where
     FMapX :: (x -> y) -> Re f x -> Re f (FMap x y)
     deriving (Typeable)
 
-data BoolBefore = BoolBefore { before :: Bool }
-type ReBBefore x = Re BoolBefore x
+data BoolBefore a = BoolBefore { before :: Bool }
+-- type ReBBefore x = Re BoolBefore x
 
-data BoolAfter = BoolAfter { after :: Bool }
-type ReBAfter x = Re BoolAfter x
+data BoolAfter a = BoolAfter { after :: Bool }
+-- type ReBAfter x = Re BoolAfter x
 
 -- -- Funny enough, pass (later) works, but pass' doesn't type-check.
 -- -- even though we never really look at the first argument!
@@ -88,9 +112,9 @@ type ReBAfter x = Re BoolAfter x
 -- pass' a (CutT x' y') = CutT (pass' a x') (pass' a y')
 -- pass' a (SeqT x' y') = SeqT (pass' a x') (pass' a y')
 
-f :: Eq a => a -> Re BoolBefore x -> x -> Re BoolAfter x
-f a (SymX _) (Sym (Just l)) | _ a l = SymX (BoolAfter True)
-f a (AltX x' y') (Alt x y) = AltX (f a x' x) (f a y' y) -- AltX (f x x') (f y y')
+-- f :: Eq a => a -> Req a BoolBefore (x a) -> x a -> Req a BoolAfter (x a)
+-- -- f a (SymX _) (Sym (Just l)) | _ a l = SymX (BoolAfter True)
+-- f a (AltQ x' y') (Alt_ x y) = AltQ (f a x' x) (f a y' y) -- AltX (f x x') (f y y')
 
 -- This seems like boiler plate.
 -- pass :: Eq a => x -> a -> Re BoolBefore x -> Re BoolAfter x
