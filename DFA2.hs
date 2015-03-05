@@ -42,69 +42,70 @@ data Req a f x where
     -- Alternative, |
     AltQ :: Req a f x -> Req a f y -> Req a f (Alt_ a x y)
 
-f :: Eq a => a -> Req a BoolBefore (x c) -> x a -> Req a BoolAfter (x c)
-f a (SymQ (BoolBefore True)) (Sym (Just l)) | elem a l = SymQ (BoolAfter True)
+f :: Eq a => a -> Re a BoolBefore (x c) -> x a -> Re a BoolAfter (x c)
+f a (SymX (BoolBefore True)) (Sym (Just l)) | elem a l = SymX (BoolAfter True)
 -- f a (AltQ x' y') (Alt_ x y) = undefined -- AltQ (f a x' x) (f a y' y) -- AltX (f x x') (f y y')
 
 
 data Sym a where
     Sym :: Maybe [a] -> Sym a
-    deriving (Typeable, Show, Eq, Ord)
-data Alt x y where
-    Alt :: x -> y -> Alt x y
-    deriving (Typeable, Show, Eq, Ord)
-data Cut x y where
-     Cut :: x -> y -> Cut x y
-    deriving (Typeable, Show, Eq, Ord)
-data Seq x y where
-    Seq :: x -> y -> Seq x y
-    deriving (Typeable, Show, Eq, Ord)
-data Not x where
-    Not :: x -> Not x
-    deriving (Typeable, Show, Eq, Ord)
-data Rep x where
-    Rep :: x -> Rep x
-    deriving (Typeable, Show, Eq, Ord)
+    deriving (Typeable)
+data Alt a x y where
+    Alt :: x a -> y a -> Alt a (x a) (y a)
+    deriving (Typeable)
+data Cut a x y where
+     Cut :: x a -> y a -> Cut a (x a) (y a)
+    deriving (Typeable)
+data Seq a x y where
+    Seq :: x a -> y a -> Seq a (x a) (y a)
+    deriving (Typeable)
+data Not a x where
+    Not :: x a -> Not a (x a)
+    deriving (Typeable)
+data Rep a x where
+    Rep :: x a -> Rep a (x a)
+    deriving (Typeable)
+-- Do we need `a' for Eps?
 data Eps x where
     Eps :: x -> Eps x
-    deriving (Typeable, Show, Eq, Ord)
+    deriving (Typeable)
 data Nil where
     Nil :: Nil
-    deriving (Typeable, Show, Eq, Ord)
-
-data FMap x y where
-    FMap :: FMap (x -> y) y
     deriving (Typeable)
 
-data Re f x where
+data FMap a x y where
+    FMap :: (x a -> y a) -> x a -> FMap a (x a -> y a) (x a)
+    deriving (Typeable)
+
+data Re a f x where
     -- Ranges of letters.  Nothing stands for .
     -- TODO: Add character classes later.
-    SymX :: f -> Re f (Sym x)
+    SymX :: f a -> Re a f (Sym a)
     -- Alternative, |
-    AltX :: Re f x -> Re f y -> Re f (Alt x y)
+    AltX :: Re a f x -> Re a f y -> Re a f (Alt a x y)
     -- Intersection
-    CutX :: Re f x -> Re f y -> Re f (Cut x y)
+    CutX :: Re a f x -> Re a f y -> Re a f (Cut a x y)
     -- Sequencing
-    SeqX :: Re f x -> Re f y -> Re f (Seq x y)
+    SeqX :: Re a f x -> Re a f y -> Re a f (Seq a x y)
     -- Repetition, Kleene Star *
-    RepX :: Re f x -> Re f (Rep x)
+    RepX :: Re a f x -> Re a f (Rep a x)
     -- Plus :: Re x -> Re (NonEmptyList x)
     -- Complement
-    NotX :: Re f x -> Re f (Not x)
+    NotX :: Re a f x -> Re a f (Not a x)
     -- Match empty string
-    EpsX :: x -> Re f (Eps x)
+    EpsX :: x -> Re a f (Eps x)
     -- Match no string
-    NilX :: Re f Nil 
+    NilX :: Re a f Nil 
     -- -- Do we need something like the lens trick?
     -- This might not work!
-    FMapX :: (x -> y) -> Re f x -> Re f (FMap x y)
+    -- FMapX :: (x a -> y a) -> Re a f (x a) -> Re a f (FMap a x y)
     deriving (Typeable)
 
 data BoolBefore a = BoolBefore { before :: Bool }
--- type ReBBefore x = Re BoolBefore x
+type ReBBefore a x = Re a BoolBefore x
 
 data BoolAfter a = BoolAfter { after :: Bool }
--- type ReBAfter x = Re BoolAfter x
+type ReBAfter a x = Re a BoolAfter x
 
 -- -- Funny enough, pass (later) works, but pass' doesn't type-check.
 -- -- even though we never really look at the first argument!
