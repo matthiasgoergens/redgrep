@@ -36,9 +36,15 @@ zzz :: Re Char BoolBefore (Sym Char)
 zzz = SymX (BoolBefore True)
 
 f :: Eq a => a -> Re a BoolBefore (x c) -> x a -> Re a BoolAfter (x c)
-f a (SymX (BoolBefore True)) (Sym (Just l)) | elem a l = SymX (BoolAfter True)
+f a (SymX (BoolBefore before)) (Sym l) = SymX (BoolAfter $ before && maybe True (elem a) l)
 -- f a (AltQ x' y') (Alt_ x y) = undefined -- AltQ (f a x' x) (f a y' y) -- AltX (f x x') (f y y')
 
+-- -- This don't work.  Silly!  It's just a shuffling of the arguments..
+-- h :: Eq a => x a -> a -> Re a BoolBefore (x a) -> Re a BoolAfter (x a)
+-- h (Sym l) a (SymX (BoolBefore before)) = SymX (BoolAfter $ before && maybe True (elem a) l)
+
+-- g :: Eq a => x a -> a -> Re a BoolBefore (x c) -> Re a BoolAfter (x c)
+-- g re a rex = f a re rex
 
 data Sym a where
     Sym :: Maybe [a] -> Sym a
