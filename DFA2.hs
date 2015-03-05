@@ -27,20 +27,13 @@ data Alt_ a x y where
     Alt_ :: x a -> y a -> Alt_ a (x a) (y a)
     deriving (Typeable)
 
--- xxx :: Alt_ Char (Sym Char) (Sym Char)
-xxx = Alt_ (Sym Nothing) (Sym Nothing)
-yyy :: Req Char BoolBefore (Alt_ Char x (Sym Char))
-yyy = AltQ undefined zzz
+xxx :: Alt Char (Sym Char) (Sym Char)
+xxx = Alt (Sym Nothing) (Sym Nothing)
+yyy :: Re Char BoolBefore (Alt Char x (Sym Char))
+yyy = AltX undefined zzz
 
-zzz :: Req Char BoolBefore (Sym Char)
-zzz = SymQ (BoolBefore True)
-
-data Req a f x where
-    -- Ranges of letters.  Nothing stands for .
-    -- TODO: Add character classes later.
-    SymQ :: f a -> Req a f (Sym a)
-    -- Alternative, |
-    AltQ :: Req a f x -> Req a f y -> Req a f (Alt_ a x y)
+zzz :: Re Char BoolBefore (Sym Char)
+zzz = SymX (BoolBefore True)
 
 f :: Eq a => a -> Re a BoolBefore (x c) -> x a -> Re a BoolAfter (x c)
 f a (SymX (BoolBefore True)) (Sym (Just l)) | elem a l = SymX (BoolAfter True)
