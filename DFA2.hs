@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs,TupleSections,TemplateHaskell,ViewPatterns #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor, OverlappingInstances #-}
 
 module DFA2 where
 import Prelude hiding (sequence, mapM)
@@ -83,6 +83,78 @@ data Re' f = Sym' f | Alt' (Re' f) (Re' f) | Cut' (Re' f) (Re' f)
            | Eps' | Nil'
     deriving (Typeable, Eq, Ord, Show)
 
+instance Arbitrary a => Arbitrary (Re' a) where
+    arbitrary = sized $ \n ->
+        let simple = [ Sym' <$> arbitrary
+                     , pure Eps'
+                     , pure Nil' ]
+            r1 = resize (n-1)
+            r2 = resize (n `div` 2)
+            complex = [ r2 $ Alt' <$> arbitrary <*> arbitrary
+                      , r2 $ Cut' <$> arbitrary <*> arbitrary
+                      , r2 $ Seq' <$> arbitrary <*> arbitrary
+                      , r1 $ Rep' <$> arbitrary
+                      , r1 $ Not' <$> arbitrary
+                      ]
+        in if n <= 0
+        then oneof simple
+        else oneof $ simple ++ complex
+    shrink = shrink'
+
+shrink2 :: Arbitrary a => (Re' a -> Re' a -> Re' a) -> Re' a -> Re' a -> [Re' a]
+shrink2 f x y = (f x <$> shrink' y)
+             ++ (f <$> shrink' x <*> pure y)
+             ++ (f <$> shrink' x <*> shrink' y)
+             ++ [Nil']
+
+shrink' :: Arbitrary a => Re' a -> [Re' a]
+shrink' (Sym' x) = (Sym' <$> shrink x) ++ [Nil']
+shrink' (Alt' x y) = shrink2 Alt' x y
+shrink' (Cut' x y) = shrink2 Cut' x y
+shrink' (Seq' x y) = shrink2 Seq' x y
+shrink' (Rep' x) = (Rep' <$> shrink' x) ++ [Nil']
+shrink' (Not' x) = (Not' <$> shrink' x) ++ [Nil']
+shrink' (Eps') = [Nil']
+shrink' Nil' = []
+
+
+data ReX f = forall x. ReX { unReX :: Re f x }
+
+useRe'2 :: (forall x y. Re f x -> Re f y -> b) -> ReX f -> ReX f -> b
+useRe'2 f (ReX x) (ReX y) = f x y
+
+useRe'1 :: forall f b. (forall x. Re f x -> b) -> ReX f  -> b
+useRe'1 f (ReX x) = f x
+
+useRe' :: forall f y. (forall x. Re f x -> Re f y) -> ReX f  -> ReX f
+useRe' f x = useRe'1 (ReX . f) x
+-- useRe' f (ReX x) = ReX $ useRe'1 f (ReX x)
+-- something like a functor..
+-- useRe' f (Alt' x y) = f $ useRe' (useRe' AltX x) y
+
+up :: Re' f -> ReX f
+up (Sym' f) = ReX (SymX f)
+up (Alt' x y) = case (up x, up y) of
+    (ReX x', ReX y') -> ReX $ AltX x' y'
+up (Cut' x y) = case (up x, up y) of
+    (ReX x', ReX y') -> ReX $ CutX x' y'
+up (Seq' x y) = case (up x, up y) of
+    (ReX x', ReX y') -> ReX $ SeqX x' y'
+up (Rep' x) = useRe'1 (ReX . RepX) (up x)
+up (Not' x) = useRe'1 (ReX . NotX) (up x)
+up Eps' = ReX (EpsX ())
+up Nil' = ReX NilX
+
+down :: Re f x -> Re' f
+down (SymX f) = Sym' f
+down (AltX x y) = Alt' (down x) (down y)
+
+inUp :: (forall x . Re f x -> b) -> Re' f -> b
+inUp f = useRe'1 f . up
+
+instance Show (ReX (Maybe [Char])) where
+        show (ReX x) = show x
+
 instance Show (Re (Maybe [Char]) x) where
     showsPrec d re = case re of
         SymX Nothing -> showString "."
@@ -94,10 +166,14 @@ instance Show (Re (Maybe [Char]) x) where
         RepX a -> showParen (d > 10) $ showsPrec 11 a . showString "*"
         NotX (EpsX _) -> showParen (d > 8) $ showString ".+"
         NotX NilX -> showParen (d > 8) $ showString ".*"
+        NotX (SymX (Just l)) -> showString ("[^" ++ init (tail $ show l) ++ "]")
         NotX a -> showParen (d > 8) $ showString "!" . showsPrec 9 a
         EpsX _ -> showString "ε"
         NilX -> showString "∅"
 --        FMap _ a -> showParen (d > 8) $ showString "$" . showsPrec 9 a -- Not great.
+
+instance Show (ReX BoolAfter) where
+        show (ReX x) = show x
 
 instance Show (Re BoolAfter x) where
     showsPrec d re = case re of
@@ -113,6 +189,9 @@ instance Show (Re BoolAfter x) where
         EpsX _ -> showString "ε"
         NilX -> showString "∅"
 
+instance Show (ReX BoolBefore) where
+        show (ReX x) = show x
+
 instance Show (Re BoolBefore x) where
     showsPrec d re = case re of
         SymX (BoolBefore True) -> showString "+"
@@ -127,6 +206,23 @@ instance Show (Re BoolBefore x) where
         EpsX _ -> showString "ε"
         NilX -> showString "∅"
 
+{-
+instance Show f => Show (ReX f) where
+        show (ReX x) = show x
+
+instance Show f => Show (Re f x) where
+    showsPrec d re = case re of
+        SymX f -> showsPrec d f
+        AltX a b -> showParen (d > 5) $ showsPrec 6 a . showString "|" . showsPrec 6 b
+        CutX a b -> showParen (d > 6) $ showsPrec 7 a . showString "&" . showsPrec 7 b
+        SeqX a b -> showParen (d > 9) $ showsPrec 10 a . showsPrec 10 b
+        RepX a -> showParen (d > 10) $ showsPrec 11 a . showString "*"
+        NotX (EpsX _) -> showParen (d > 8) $ showString ".+"
+        NotX NilX -> showParen (d > 8) $ showString ".*"
+        NotX a -> showParen (d > 8) $ showString "!" . showsPrec 9 a
+        EpsX _ -> showString "ε"
+        NilX -> showString "∅"
+-}
 
 {-
 conv :: Re f x -> Re' f
@@ -271,5 +367,10 @@ match1 re a start state =
 match :: Eq a => Re (N a) x -> [a] -> Bool
 match re s = fst $ step False $ foldl (.) id (zipWith (match1 re) s (True : repeat False)) (make re)
 
+match' :: Eq a => Re' (N a) -> [a] -> Bool
+match' re s = inUp match re s
+
+prop_match' :: Re' (N Char) -> [Char] -> Property
+prop_match' re s = match' re s === match' (Alt' re Nil') s
 
 test = match (EpsX "bla") "1"
