@@ -3,7 +3,7 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor, OverlappingInstances #-}
 
-module DFA2 where
+module Main where
 import Prelude hiding (sequence, mapM)
 import Data.List (sort)
 import Data.Monoid
@@ -94,6 +94,7 @@ instance Arbitrary a => Arbitrary (Re' a) where
                       , r2 $ Cut' <$> arbitrary <*> arbitrary
                       , r2 $ Seq' <$> arbitrary <*> arbitrary
                       , r1 $ Rep' <$> arbitrary
+                      -- Reenable not, when we have fixed the other bugs.
                       , r1 $ Not' <$> arbitrary
                       ]
         in if n <= 0
@@ -105,6 +106,8 @@ shrink2 :: Arbitrary a => (Re' a -> Re' a -> Re' a) -> Re' a -> Re' a -> [Re' a]
 shrink2 f x y = (f x <$> shrink' y)
              ++ (f <$> shrink' x <*> pure y)
              ++ (f <$> shrink' x <*> shrink' y)
+             ++ [x]
+             ++ [y]
              ++ [Nil']
 
 shrink' :: Arbitrary a => Re' a -> [Re' a]
@@ -112,8 +115,8 @@ shrink' (Sym' x) = (Sym' <$> shrink x) ++ [Nil']
 shrink' (Alt' x y) = shrink2 Alt' x y
 shrink' (Cut' x y) = shrink2 Cut' x y
 shrink' (Seq' x y) = shrink2 Seq' x y
-shrink' (Rep' x) = (Rep' <$> shrink' x) ++ [Nil']
-shrink' (Not' x) = (Not' <$> shrink' x) ++ [Nil']
+shrink' (Rep' x) = (Rep' <$> shrink' x) ++ [x] ++ [Nil']
+shrink' (Not' x) = (Not' <$> shrink' x) ++ [x] ++ [Nil']
 shrink' (Eps') = [Nil']
 shrink' Nil' = []
 
@@ -283,6 +286,17 @@ h f (RepX x) = RepX (h f x)
 h f (EpsX x) = EpsX x
 h f NilX = NilX
 
+h' :: (f -> g) -> (g -> g) -> Re f x -> Re g x
+h' f g (SymX l) = SymX $ f l
+h' f g (AltX x y) = AltX (h' f g x) (h' f g y)
+h' f g (CutX x y) = CutX (h' f g x) (h' f g y)
+h' f g (SeqX x y) = SeqX (h' f g x) (h' f g y)
+h' f g (NotX x) = NotX (h' (g . f) g x)
+h' f g (RepX x) = RepX (h' f g x)
+h' f g (EpsX x) = EpsX x
+h' f g NilX = NilX
+
+
 -- -- Funny enough, pass (later) works, but pass' doesn't type-check.
 -- -- even though we never really look at the first argument!
 -- pass' a (AltT x' y') = AltT (pass' a x') (pass' a y')
@@ -343,6 +357,7 @@ step new (SeqX x y) =
     -- Nice and typesafe: Try mixing up x' and x!
     in (newy, SeqX x' y')
 step new (CutX x y) = ((&&), CutX) <<.>> step new x <<.>> step new y
+-- Hmm, not is giving me problems.
 step new (NotX x) = not *** NotX $ step new x
 -- Avoid infinite regress, but get this right..
 -- Tricky!  Let's hope this is the right approach!
@@ -355,17 +370,18 @@ step new (EpsX x) = (new, EpsX x)
 step new NilX = (False, NilX) -- ?
 
 make :: Re f x -> Re BoolAfter x
-make = h (const $ BoolAfter False)
+make = h' (const $ BoolAfter False) (\(BoolAfter x) -> BoolAfter (not x))
 
 -- step :: Bool -> Re BoolAfter x -> (Bool, Re BoolBefore x)
 -- pass :: Eq a => a -> Re BoolBefore x -> Re (Maybe [a]) x -> Re BoolAfter x
-match1 :: Eq a => Re (Maybe [a]) x -> a -> Bool -> Re BoolAfter x -> Re BoolAfter x
+match1 :: Eq a => Re (Maybe [a]) x -> a -> Bool -> Re BoolAfter x -> (Bool, Re BoolAfter x)
 match1 re a start state =
-    let (_, bbefore) = step start state
-    in pass a bbefore re
+    let (after, bbefore) = step start state
+    in (after, pass a bbefore re)
 
 match :: Eq a => Re (N a) x -> [a] -> Bool
-match re s = fst $ step False $ foldl (.) id (zipWith (match1 re) s (True : repeat False)) (make re)
+match re s = fst $ foldl c (step True $ make re) s
+    where c (_, re') a = step False (pass a re' re)
 
 match' :: Eq a => Re' (N a) -> [a] -> Bool
 match' re s = inUp match re s
@@ -373,4 +389,30 @@ match' re s = inUp match re s
 prop_match' :: Re' (N Char) -> [Char] -> Property
 prop_match' re s = match' re s === match' (Alt' re Nil') s
 
+prop_eps :: Re' (N Char) -> Property
+prop_eps re = inUp epsable re === match' re ""
+
+prop_eps' :: Re' (N Char) -> Property
+prop_eps' re = case up re of
+    ReX re -> epsable re === fst (step True (make re))
+
+prop_not :: Re' (N Char) -> String -> Property
+prop_not re s = match' re s === not (match' (Not' re) s)
+
 test = match (EpsX "bla") "1"
+
+{-
+We want a formal correspondence:
+
+    step a
+nfa ------> nfa
+ ^           ^
+ |           |
+ v    d a    v
+red ------> red
+
+
+-}
+
+return []
+main = $quickCheckAll
