@@ -236,6 +236,19 @@ conv (SeqX x y) = Seq' (conv x) (conv y)
 conv
 -}
 
+{-
+Ring:
+* can be seq or intersection (With 1 = eps or '.', and 0 = nil.)
++ is alternative.  Is there an alterative +?
+(Our plus is idempotent.)
+
+How to express Nil (and Eps) in NFA world?
+
+In red world, Eps can only be gotten via d _ (Sym _)
+We accounted for that.
+Nil happens after: Sym, Eps, Nil
+(Ie really only in one place.  Patching up Sym might be good enough.)
+-}
 
 data Re f x where
     -- Ranges of letters.  Nothing stands for .
@@ -354,10 +367,10 @@ step new (AltX x y) = ((||), AltX) <<.>> step new x <<.>> step new y
 step new (SeqX x y) =
     let (newx, x') = step new x
         (newy, y') = step newx y
-    -- Nice and typesafe: Try mixing up x' and x!
+    -- Nice and typesafe: Ttry mixing up x' and x!
     in (newy, SeqX x' y')
 step new (CutX x y) = ((&&), CutX) <<.>> step new x <<.>> step new y
--- Hmm, not is giving me problems.
+-- Hmm, NotX is giving me problems.
 step new (NotX x) = not *** NotX $ step new x
 -- Avoid infinite regress, but get this right..
 -- Tricky!  Let's hope this is the right approach!
@@ -371,6 +384,31 @@ step new NilX = (False, NilX) -- ?
 
 make :: Re f x -> Re BoolAfter x
 make = h' (const $ BoolAfter False) (\(BoolAfter x) -> BoolAfter (not x))
+
+-- Is this some kind of (<*>)?  If yes, than on the first argument, not the last/second.
+-- Can we abstract this repeated pattern?  (Something like uniplate, or scrap your boilerplate?)
+-- Oh, NotX means we need an explicit & and |.
+unionCut :: forall f g h x . (f -> g -> h) -> (f -> g -> h) -> Re f x -> Re g x -> Re h x
+unionCut (*) (+) = u where
+    u :: forall x . Re f x -> Re g x -> Re h x
+    u (SymX x) (SymX y) = SymX $ x + y
+    u (AltX x y) (AltX x' y') = AltX (u x x') (u y y')
+    u (SeqX x y) (SeqX x' y') = SeqX (u x x') (u y y')
+    u (CutX x y) (CutX x' y') = CutX (u x x') (u y y')
+    -- NOTE: we swap (+) and (*).
+    u (NotX x) (NotX x') = NotX $ unionCut (+) (*) x x'
+    u (RepX x) (RepX x') = RepX $ u x x'
+    -- We have a choice here.  Doesn't matter too much what we do.
+    -- Left biased by default.
+    u (EpsX x) (EpsX x') = EpsX $ x
+    u NilX NilX = NilX
+
+-- Or do we need BoolBefore?
+union, cut :: Re BoolAfter x -> Re BoolAfter x -> Re BoolAfter x
+union = unionCut (onBoolAfter (&&)) (onBoolAfter (||))
+cut   = unionCut (onBoolAfter (||)) (onBoolAfter (&&))
+onBoolAfter (*) (BoolAfter x) (BoolAfter y) = BoolAfter $ x * y
+onBoolBefore (*) (BoolBefore x) (BoolBefore y) = BoolBefore $ x * y
 
 -- step :: Bool -> Re BoolAfter x -> (Bool, Re BoolBefore x)
 -- pass :: Eq a => a -> Re BoolBefore x -> Re (Maybe [a]) x -> Re BoolAfter x
@@ -411,8 +449,105 @@ nfa ------> nfa
  v    d a    v
 red ------> red
 
+In red, all the continuation magic happens in the FMaps.
+Where to put the value bearing in the NFA?
+We know: all instances of a state have the same type.
+Muck around with Functors (and other combinations)?
+
+How does Not work in the NFA world (especially Seq a (Not b).)
+
+In red world:
+
+a(^b) [... TODO fill in.]
+
+Guess, we need: Occupancy, but not epsably! (Or do we?)
+
+a(^b)c
+matched by
+abxc
+in steps:
+a: (^b)c
+b: (^1)c
+x: (^0)c
+c: Eps
+
+(Where 1 == Eps, 0 == Nil.)
+
+OK, so going to Nil as occupancy is important!
+
+b?(^b)c
+matches bc as:
+b: .*(^b)c | (^Eps)c
+c: Eps | [...]
+
+...(^...)...
+(Sequence will lead to a structure like this:)
+((^Nil) | (^b))  ...
+
+^x | ^y === ^(x & y)
+Ie, Nil outweights everything.
+(As we expect.)
+
+So, how do we represent this in the NFA / tree world?
+
+^(a|b)
+
+Perhaps look at this backwards? (Since the whole thing is supposed to be
+symmetric in that regard.)
+
+
+aab: a?^(aa | a $ b)
+
+a: ^(a | Eps $ b) | ^(aa | a $ b)
+a: ^(Eps | Nil $ b) | ^(a | Eps $ b)
+ = ^(b)             | ^(a? b)
+b: ^(Eps)           | ^(Eps)
+
+   a?^(ab | bc)
+a: ^(b|Nil) | ^(ab|bc)
+b: ^(Eps) | ^(Nil|c)
+
+How to unify that onto a single ^-root?
+
+^(Eps & (Nil | c))
+
+Each new entrant gets an &.
+
+How does the original redgrep do it?
+
+OK, can we unify via &, if we know that all states are from somewhere in the expression?
+We can but try.
+
+(We should actually be able to do | as well.)
+
+OK, assume that works.
+
+Now, we need to discriminate between `not in a state' and `in a non-terminal state'.  (So we can invert.)
+Without inversion / complement, we wouldn't have to worry about that difference.
 
 -}
+
+-- This is the heart of the derivative based algorithm.
+
+d :: Eq a => a -> Re a x -> Re a x
+d c (Sym Nothing) = Eps c
+d c (Sym (Just as))
+    | c `elem` as = Eps c
+    | otherwise = Nil
+d c (Alt a b) = Alt (d c a) (d c b)
+d c (Cut a b) = Cut (d c a) (d c b)
+-- This one grows.
+-- The top-most Alt can be done by our `unionCut`
+-- can and has to be.
+d c (Seq a b) = FMap (either id id) $ Seq (d c a) b `Alt` Seq (v a) (d c b)
+-- This one grows. -- but doesn't have to.
+d c (Rep a) = FMap (uncurry (:)) $ Seq (d c a) (Rep a)
+-- Magic here.
+d c (Not a) = Not (d c a)
+-- Need to be able to represent Nil.
+d _ (Eps _) = Nil
+d _ Nil = Nil
+d c (FMap f x) = FMap f (d c x)
 
 return []
 main = $quickCheckAll
