@@ -417,6 +417,20 @@ prop_simplify_notBigger re = descending . take 100 . map size $ iterate simplify
 prop_same_simplify :: Re Char [Char] -> Bool
 prop_same_simplify (simplify -> re) = isJust (same re re)
 
+-- NOTE: Insight: We can handle more simplification,
+-- if we restrict ourselves to unifying collections of
+-- states / expressions that come up as derivatives
+-- of ONE given regular expression, (and preserve that
+-- knowledge for the type-checker.)
+-- Collections here means: Boolean expressions (&, |, not, etc)
+-- over these states.
+-- On the Haskell level, we represent this as an intermediate layer
+-- in between EACH nodes of the tree.
+
+-- (There's a normal form that doesn't require this.  But
+-- figuring out how to represent this normal form is perhaps a bit hard
+-- right now.)
+
 -- TODO: correctness of simplify.
 -- Probably via a non-simplify ds
 simplify :: forall a x . Eq a => Re a x -> Re a x
