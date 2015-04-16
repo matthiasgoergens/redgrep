@@ -32,7 +32,9 @@ import Types
 -- This is the heart of the derivative based algorithm.
 -- Everything else just needs to support these operations
 
-extract :: Re a x -> Maybe x
+type SymResult = Maybe (Either Char SymError)
+
+extract :: ReE SymResult x y -> Maybe (Either (a x) (a y))
 extract = undefined
 
 v = undefined

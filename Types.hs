@@ -41,9 +41,12 @@ data Re' f = Sym' f | Alt' (Re' f) (Re' f) | Cut' (Re' f) (Re' f)
            | Eps' | Nil'
     deriving (Typeable, Eq, Ord, Show)
 
+-- TODO: Add Char as variable.
+data SymError = BeforeSym | GotWrong | AfterSym
+
 data ReE f x y where
     -- Or perhaps different?
-    SymE :: f -> ReE f Sym Sym
+    SymE :: f -> ReE f Sym SymError
     -- De Morgan
     AltE :: ReE f x y -> ReE f x' y' -> ReE f (Alt x x') (Cut y y')
     CutE :: ReE f x y -> ReE f x' y' -> ReE f (Cut x x') (Alt y y')
@@ -59,7 +62,12 @@ data ReE f x y where
     NilE :: y -> ReE f x y
     FMapE :: (x -> x') -> (y -> y') -> ReE f x y -> ReE f x' y'
 
-
+-- back in Char for now.  TODO: make flexible.
+data ReRes x where
+    SymErr :: SymError -> ReRes SymError
+    SymRes :: Char -> ReRes Sym
+    Alt1 :: Either (ReRes x) (ReRes y) -> ReRes (Alt x y)
+    Alt2 :: ReRes x -> ReRes y -> ReRes (Alt x y)
 
 data Re f x where
     -- Ranges of letters.  Nothing stands for .
