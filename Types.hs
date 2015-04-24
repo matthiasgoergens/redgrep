@@ -5,23 +5,26 @@
 module Types where
 import Data.Typeable
 
-data Sym
---    Sym :: Maybe [a] -> Sym a
+data Sym where
+    -- Is this right?
+    Sym :: Char -> Sym
     deriving (Typeable)
-data Alt x y
+data Alt x y where
+    Alt2 :: x -> y -> Alt x y
+    Alt1 :: (Either x y) -> Alt x y
 --    Alt :: x a -> y a -> Alt a (x a) (y a)
     deriving (Typeable)
-data Cut x y -- where
---     Cut :: x a -> y a -> Cut a (x a) (y a)
+data Cut x y where
+    Cut :: x -> y -> Cut x y
     deriving (Typeable)
-data Seq x y -- where
---    Seq :: x a -> y a -> Seq a (x a) (y a)
+data Seq x y where
+    Seq :: x -> y -> Seq x y
     deriving (Typeable)
 data Not x -- where
 --    Not :: x a -> Not a (x a)
     deriving (Typeable)
-data Rep x -- where
---    Rep :: x a -> Rep a (x a)
+data Rep x where
+    Rep :: [x] -> Rep x
     deriving (Typeable)
 -- Do we need `a' for Eps?
 data Eps x -- where
@@ -52,12 +55,14 @@ data ReE f x y where
     CutE :: ReE f x y -> ReE f x' y' -> ReE f (Cut x x') (Alt y y')
     -- Is that error type right?
     -- (Alternative was just Alt y y'
-    SeqE :: ReE f x y -> ReE f x' y' -> ReE f (Seq x x') (Alt y (Seq x y'))
+    SeqE :: ReE f x y -> ReE f x' y' -> ReE f (Seq x x') (Either y (Seq x y'))
     -- Is that error type right?
-    RepE :: ReE f x y -> ReE f (Rep x) (Seq (Rep x) y)
+    RepE :: ReE f x y               -> ReE f (Rep x) (Seq (Rep x) y)
+    RepEM :: ReE f x y -> ReE f x y -> ReE f (Rep x) (Seq (Rep x) y)
     -- No explicit Not required?
     NotE :: ReE f x y -> ReE f y x
     -- NotE :: ReE f x y -> ReE f (Not y) (Not x)
+    -- Not quite sure if we don't need a wrapper or so?
     EpsE :: x -> ReE f x y
     NilE :: y -> ReE f x y
     FMapE :: (x -> x') -> (y -> y') -> ReE f x y -> ReE f x' y'
@@ -66,8 +71,8 @@ data ReE f x y where
 data ReRes x where
     SymErr :: SymError -> ReRes SymError
     SymRes :: Char -> ReRes Sym
-    Alt1 :: Either (ReRes x) (ReRes y) -> ReRes (Alt x y)
-    Alt2 :: ReRes x -> ReRes y -> ReRes (Alt x y)
+--    Alt1 :: Either (ReRes x) (ReRes y) -> ReRes (Alt x y)
+--    Alt2 :: ReRes x -> ReRes y -> ReRes (Alt x y)
 
 data Re f x where
     -- Ranges of letters.  Nothing stands for .
