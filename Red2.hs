@@ -96,7 +96,7 @@ d c (RepEM a b) = case d c (SeqE a (RepE b)) of
 d c (NotE a) = NotE (d c a)
 -- Need to be able to represent Nil.
 d _ (EpsE a) = NilE undefined -- TODO: define!
-d _ (NilE y) = (NilE y)
+d _ (NilE y) = NilE y
 -- d c (FMap f x) = FMap f (d c x)
 
 -- Or do we need BoolBefore?
@@ -107,8 +107,8 @@ unionCut' :: forall f g h x y . (f -> g -> h) -> (f -> g -> h) -> ReE f x y -> R
 unionCut' (*) (+) = u where
     u :: forall x y . ReE f x y -> ReE g x y -> ReE h x y
     u (SymE x) (SymE y) = SymE $ x + y
-    u (SymE x) (EpsE _) = _ --- TODO.  We'll probably need a better reprentation.
-    u (SymE x) (NilE _) = _ --- TODO
+    u (SymE x) (EpsE _) = undefined --- TODO.  We'll probably need a better reprentation.
+    u (SymE x) (NilE _) = undefined --- TODO
     u (AltE x y) (AltE x' y') = AltE (u x x') (u y y')
     u (SeqE x y) (SeqE x' y') = SeqE (u x x') (u y y')
     u (CutE x y) (CutE x' y') = CutE (u x x') (u y y')
@@ -146,5 +146,75 @@ cut   = unionCut (onBoolAfter (||)) (onBoolAfter (&&))
 onBoolAfter (*) (BoolAfter x) (BoolAfter y) = BoolAfter $ x * y
 onBoolBefore (*) (BoolBefore x) (BoolBefore y) = BoolBefore $ x * y
 
+data Evidence x where
+    SymV :: Char -> Evidence Sym
+    AltV :: Evidence x -> Evidence y -> Evidence (Alt x y)
+    SeqV :: Evidence x -> Evidence y -> Evidence (Seq x y)
+    CutV :: Evidence x -> Evidence y -> Evidence (Cut x y)
+    -- Not?
+
+-- How to describe, on the type level, the type to the left, and right of a
+-- specific cursor / lens point.  Something with continuations?
+-- Seq x y
+-- left:
+-- f y -> f (Seq x y)
+-- f (Seq x y) -> f x
+-- f (Seq x y) -> f y
+
+-- cursor means = everything to the left is equivalent to eps.
+
+isValid :: ReE f x y -> Evidence x -> Maybe String
+isValid = undefined
+
+extractString :: Evidence x -> Maybe String
+extractString = undefined
+
+prop_evidenceSeq :: Evidence x -> Evidence y -> Property
+prop_evidenceSeq x y = ((++) <$> extractString x <*> extractString y)
+    === extractString (SeqV x y)
+-- But that's only at the top level.  That's somewhat disappointing.
+
+check :: ReE f x y -> String -> Evidence x -> Bool
+check = undefined
+
+-- Can't type reverse in the general case..
+reverse' :: Re f (Seq a b) -> Re f (Seq b a)
+reverse' (SeqX a b) = (SeqX b a)
 
 main = return ()
+
+{-
+
+Before = id
+Eps
+Nil
+
+In the case of full expressions:
+{ Before, Eps }
+Nil = {}  -- empty
+-- Is that true?
+
+a e c
+e b e
+---- point-wise union /= union
+a|e b|e c|e -- that's false
+
+We could rescue the point-wise union by arguing that
+in our cases it might work?  (We only ever produce things to union
+via derivatives of one common expression.)
+
+Let's see:  first, derivatives work from left to right.  Thus a e c is not
+possible like this.
+
+
+a (b|bc) c
+e  e ec  c
+match: abc
+e  e ee  c \
+e  e _   e - (c|e)
+
+-- move through seq from left to right. (rep* complicates things..)
+
+Let's produce and check evidence of match.  (and evidence of non-match in the other case.  equivalent, because of complement operator.)
+
+-}

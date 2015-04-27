@@ -112,10 +112,10 @@ compile = ($ []) . fold
     altD l r pre = altD' (l $ 0:pre) (r $ 1:pre)
     altD' :: DfA a [ID] -> DfA a [ID] -> DfA a [ID]
     altD' (DfA lStart lN lAccepting lStep)
-          (DfA rStart rN rAccepting rStep) =
+          (DfA rStart rN rAccepting rStep) = undefined
         -- TODO: hah, we need to separate the states to feed them
         -- to the two old accepting functions.
-        DfA (Set.union lStart rStart) (lN, rN
+--        DfA (Set.union lStart rStart) (lN, rN
 
 
 bind :: (Ord a, Ord b) => (a -> Set b) -> Set a -> Set b

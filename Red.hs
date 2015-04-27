@@ -20,8 +20,8 @@ import Control.Arrow
 import Control.Monad
 
 import Debug.Trace (trace)
-import Control.Lens hiding (elements)
-import Control.Lens.Prism
+-- import Control.Lens hiding (elements)
+-- import Control.Lens.Prism
 
 
 data Re a x where
