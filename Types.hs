@@ -5,6 +5,8 @@
 module Types where
 import Data.Typeable
 
+-- Actually, we don't need any constructors for these.
+-- They can exists solely on the type level.
 data Sym where
     -- Is this right?
     Sym :: Char -> Sym
@@ -46,6 +48,7 @@ data Re' f = Sym' f | Alt' (Re' f) (Re' f) | Cut' (Re' f) (Re' f)
 
 -- TODO: Add Char as variable.
 data SymError = BeforeSym | GotWrong | AfterSym
+    deriving (Eq, Ord, Show)
 
 data ReE f x y where
     -- Or perhaps different?
@@ -58,7 +61,7 @@ data ReE f x y where
     SeqE :: ReE f x y -> ReE f x' y' -> ReE f (Seq x x') (Either y (Seq x y'))
     -- Is that error type right?
     RepE :: ReE f x y               -> ReE f (Rep x) (Seq (Rep x) y)
-    RepEM :: ReE f x y -> ReE f x y -> ReE f (Rep x) (Seq (Rep x) y)
+    -- RepEM :: ReE f x y -> ReE f x y -> ReE f (Rep x) (Seq (Rep x) y)
     -- No explicit Not required?
     NotE :: ReE f x y -> ReE f y x
     -- NotE :: ReE f x y -> ReE f (Not y) (Not x)
@@ -100,6 +103,41 @@ data Re f x where
     -- Value-bearing will make this more complicated.
     -- FMapX :: x -> y -> Re f x -> Re f (FMap x y)
     deriving (Typeable)
+
+-- focus on one alt-strand.
+data ReS1 x where
+    Before :: ReS1 x
+    -- SymS :: ReS1 Sym
+    AltSL :: ReS1 x -> ReS1 (Alt x y)
+    AltSR :: ReS1 y -> ReS1 (Alt x y)
+    CutS :: ReS1 x -> ReS1 y -> ReS1 (Cut x y)
+    -- magic here!
+    SeqSL :: ReS1 x -> ReS1 (Seq x y)
+    SeqSR :: ReS1 y -> ReS1 (Seq x y)
+    RepS :: ReS1 x -> ReS1 (Rep x)
+    -- bah, need cut, too, instead of just alt..
+    NotS :: ReC x -> ReS1 (Not x)
+    -- or ReS1 x?
+    EpsS :: x -> ReS1 x
+    NilS :: ReS1 x
+
+
+-- one cut-strain, under NOT
+data ReC x where
+    SymC :: ReC Sym
+    AltC :: ReC x -> ReC y -> ReC (Alt x y)
+    CutC1 :: ReC x -> ReC (Cut x y)
+    CutC2 :: ReC y -> ReC (Cut x y)
+    -- magic here!
+    SeqCL :: ReC x -> ReC (Seq x y)
+    SeqCR :: ReC y -> ReC (Seq x y)
+    RepC :: ReC x -> ReC (Rep x)
+    -- change to alt..
+    NotC :: ReS1 x -> ReC (Not x)
+    -- or ReS1 x?
+    EpsC :: x -> ReC x
+    NilC :: ReC x
+    
 
 data BoolBefore = BoolBefore { before :: Bool }
 type ReBBefore x = Re BoolBefore x

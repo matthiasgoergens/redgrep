@@ -8,11 +8,12 @@ import Data.List (sort)
 import Data.Monoid
 import Data.Maybe (isJust)
 import qualified Data.Set as Set
+import Data.Set (Set)
 import Data.Ord 
 import Data.Typeable
 import Control.Applicative
 -- TODO: Look into lenses.
-import Test.QuickCheck
+import Test.QuickCheck hiding (Result)
 import Test.QuickCheck.Function
 import Test.QuickCheck.All
 
@@ -23,6 +24,8 @@ import Debug.Trace (trace)
 import Data.Bifunctor.Apply
 
 import Types
+import qualified Cursor as C
+import Cursor (Cursor(), Result)
 
 -- import Control.Lens hiding (elements)
 -- import Control.Lens.Prism 
@@ -54,9 +57,11 @@ v' (SeqE a b) = case (v' a, v' b) of
     (Right a, Left b) -> Left $ Right (Seq a b)
     (Left a, _) -> Left $ Left a
 v' (RepE a) = Right $ Rep []
+{-
 v' (RepEM a b) = case v' a of
     Left a -> Left (Seq (Rep []) a)
     Right b -> Right $ Rep [b]
+-}
 v' (NotE a) = case v' a of
     Left a -> Right a
     Right b -> Left b
@@ -73,11 +78,15 @@ type Range = Maybe [Char]
 -- trans c (SymE res) (SymE range) = SymE $ case (res, range) of
 --    (Nothing, _) -> Nothing
 
+rangeMatch :: Range -> Char -> Maybe Char
+rangeMatch Nothing c = Just c
+rangeMatch (Just as) c
+    | c `elem` as = Just c
+    | otherwise = Nothing
+
+
 d :: Char -> ReE Range x y -> ReE Range x y
-d c (SymE Nothing) = EpsE (Sym c) -- c
-d c (SymE (Just as))
-    | c `elem` as = EpsE (Sym c) -- c
-    | otherwise = NilE GotWrong
+d c (SymE range) = maybe (NilE GotWrong) (EpsE . Sym) $ rangeMatch range c
 d c (AltE a b) = AltE (d c a) (d c b)
 d c (CutE a b) = CutE (d c a) (d c b)
 -- This one grows.
@@ -88,16 +97,64 @@ d c (SeqE a b) = union' (SeqE (d c a) b)
 -- This one used to grow.
 -- but didn't have to.
 -- equivalent to Seq a (Rep b)
-d c (RepE a) = RepEM (d c a) a
+-- d c (RepE a) = RepEM (d c a) a
 -- $ FMap (uncurry (:)) $ Seq (d c a) (Rep a)
-d c (RepEM a b) = case d c (SeqE a (RepE b)) of
-    SeqE x (RepEM y z) -> RepEM (union' x y) z
+-- d c (RepEM a b) = case d c (SeqE a (RepE b)) of
+--     SeqE x (RepEM y z) -> RepEM (union' x y) z
 -- Magic here.
 d c (NotE a) = NotE (d c a)
 -- Need to be able to represent Nil.
 d _ (EpsE a) = NilE undefined -- TODO: define!
 d _ (NilE y) = NilE y
 -- d c (FMap f x) = FMap f (d c x)
+
+dS :: Char -> Re Range x -> ReS1 x -> [ReS1 x]
+dS c (SymX range) Before = [maybe NilS (EpsS . Sym) $ rangeMatch range c]
+dS c (AltX x y) (AltSL x') = AltSL <$> dS c x x'
+dS c (AltX x y) (AltSR y') = AltSR <$> dS c y y'
+-- don't know how to Cut, yet.  How about thist
+-- (Inefficient in general.)
+dS c (CutX x y) (CutS x' y') = CutS <$> dS c x x' <*> dS c y y'
+dS c (SeqX x y) (SeqSL x') = (SeqSL <$> dS c x x')
+                           ++ (SeqSR <$> if vS x' then dS c y =<< startS y
+                                        else [])
+dS c (SeqX x y) (SeqSR y') = SeqSR <$> dS c y y'
+dS c (RepX x) (EpsS _) = RepS <$> (dS c x =<< startS x)
+dS c (RepX x) (RepS x') = (RepS <$> dS c x x')
+-- need a value bearing vS,
+-- and need to make sure we don't have an infinite loop.
+                           ++ (if vS x' then dS c (RepX x) (EpsS undefined)
+                                        else [])
+dS c (NotX x) (NotS x') = NotS <$> dC c x x'
+-- careful, to match RepX first.
+dS c _ (EpsS _) = [NilS]
+dS c _ NilS = [NilS]
+
+-- so much boilerplate..
+dC :: Char -> Re Range x -> ReC x -> [ReC x]
+dC c (SymX range) SymC = [maybe NilC (EpsC . Sym) $ rangeMatch range c]
+-- Is this justified?
+dC c (AltX x y) (AltC x' y') = AltC <$> dC c x x' <*> dC c y y'
+
+
+vS :: ReS1 x -> Bool
+-- not actually true, depends on x
+vS Before = False
+vS (AltSL x) = vS x
+vS (AltSR y) = vS y
+vS (CutS x y) = vS x && vS y
+-- needs vS (startS y..  We can do this purely based on type, actually.
+-- also, is `any' justified here?
+vS (SeqSL x) = vS x && any vS (startS undefined)
+vS (SeqSR y) = vS y
+-- If we consumed a single char in RepC, we can no longer pass it.
+-- How do we mark that we haven't consumed anything, yet?
+-- vS (RepC
+
+-- Need multiple for Alt-start.
+-- Or, alternatively, introduce a Start constructor?
+startS :: Re f x -> [ReS1 x]
+startS = undefined
 
 -- Or do we need BoolBefore?
 union' :: ReE a x y -> ReE a x y -> ReE a x y
@@ -180,6 +237,33 @@ check = undefined
 -- Can't type reverse in the general case..
 reverse' :: Re f (Seq a b) -> Re f (Seq b a)
 reverse' (SeqX a b) = (SeqX b a)
+
+type Cursors = Cursor Set
+
+-- I think this is push?
+blackbox :: c -> Re Range x -> Cursors x y -> Cursors x y
+blackbox = undefined
+
+begin :: ReE f x y -> Cursors x y
+begin = undefined
+-- rangeMatch :: Range -> Char -> Maybe Char
+
+result :: ReE f x y -> Cursors x y -> Maybe (Either (Result x) (Result y))
+result = undefined
+
+meld :: Cursors x y -> Cursors x y -> Cursors x y
+meld = undefined
+
+s = Set.singleton
+
+push :: Char -> ReE Range x y -> Cursors x y -> Cursors x y
+push c (SymE range) (C.Eps x) = C.Nil $ Set.map (const $ undefined AfterSym) x
+-- Shan't happen, yet..  (Though, we'll need it for not, later..)
+push c _ (C.Eps x) = C.Nil $ Set.map (error "Can't create Nil from Eps in the general case, yet.") x 
+push c _ (C.Nil e) = C.Nil e
+
+push c (SymE range) C.Before = maybe (C.Nil $ s $ _ GotWrong) (C.Eps . s . _ . Sym) $ rangeMatch range c
+push c (AltE l r) C.Before = undefined
 
 main = return ()
 

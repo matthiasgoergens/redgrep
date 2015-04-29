@@ -537,6 +537,7 @@ d c (Sym (Just as))
 d c (Alt a b) = Alt (d c a) (d c b)
 d c (Cut a b) = Cut (d c a) (d c b)
 -- This one grows.
+-- d c (Seq a b) = Seq (d c a) b +++ Seq (v a) (d c b)
 d c (Seq a b) = FMap (either id id) $ Seq (d c a) b `Alt` Seq (v a) (d c b)
 -- This one grows.
 d c (Rep a) = FMap (uncurry (:)) $ Seq (d c a) (Rep a)
