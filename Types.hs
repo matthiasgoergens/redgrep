@@ -7,26 +7,26 @@ import Data.Typeable
 
 -- Actually, we don't need any constructors for these.
 -- They can exists solely on the type level.
-data Sym where
+data Sym 
     -- Is this right?
-    Sym :: Char -> Sym
+--    Sym :: Char -> Sym
     deriving (Typeable)
 data Alt x y where
-    Alt2 :: x -> y -> Alt x y
-    Alt1 :: (Either x y) -> Alt x y
+--    Alt2 :: x -> y -> Alt x y
+--    Alt1 :: (Either x y) -> Alt x y
 --    Alt :: x a -> y a -> Alt a (x a) (y a)
     deriving (Typeable)
 data Cut x y where
-    Cut :: x -> y -> Cut x y
+--    Cut :: x -> y -> Cut x y
     deriving (Typeable)
 data Seq x y where
-    Seq :: x -> y -> Seq x y
+--    Seq :: x -> y -> Seq x y
     deriving (Typeable)
 data Not x -- where
 --    Not :: x a -> Not a (x a)
     deriving (Typeable)
 data Rep x where
-    Rep :: [x] -> Rep x
+--    Rep :: [x] -> Rep x
     deriving (Typeable)
 -- Do we need `a' for Eps?
 data Eps x -- where

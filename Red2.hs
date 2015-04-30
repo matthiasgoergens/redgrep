@@ -25,7 +25,9 @@ import Data.Bifunctor.Apply
 
 import Types
 import qualified Cursor as C
-import Cursor (Cursor(), Result)
+import Cursor (Cursor())
+import qualified Result as R
+import Result (Result())
 
 -- import Control.Lens hiding (elements)
 -- import Control.Lens.Prism 
@@ -40,6 +42,7 @@ type SymResult = Maybe (Either Char SymError)
 extract :: ReE SymResult x y -> Maybe (Either (a x) (a y))
 extract = undefined
 
+{-
 v' :: ReE f x y -> Either y x
 v' (SymE _) = Left BeforeSym
 v' (AltE a b) = case (v' a, v' b) of
@@ -70,6 +73,7 @@ v' (NilE y) = Left y
 
 v :: ReE f x y -> ReE f x y
 v = either NilE EpsE . v'
+-}
 
 type Range = Maybe [Char]
 
@@ -84,7 +88,7 @@ rangeMatch (Just as) c
     | c `elem` as = Just c
     | otherwise = Nothing
 
-
+{-
 d :: Char -> ReE Range x y -> ReE Range x y
 d c (SymE range) = maybe (NilE GotWrong) (EpsE . Sym) $ rangeMatch range c
 d c (AltE a b) = AltE (d c a) (d c b)
@@ -107,7 +111,9 @@ d c (NotE a) = NotE (d c a)
 d _ (EpsE a) = NilE undefined -- TODO: define!
 d _ (NilE y) = NilE y
 -- d c (FMap f x) = FMap f (d c x)
+-}
 
+{-
 dS :: Char -> Re Range x -> ReS1 x -> [ReS1 x]
 dS c (SymX range) Before = [maybe NilS (EpsS . Sym) $ rangeMatch range c]
 dS c (AltX x y) (AltSL x') = AltSL <$> dS c x x'
@@ -135,6 +141,7 @@ dC :: Char -> Re Range x -> ReC x -> [ReC x]
 dC c (SymX range) SymC = [maybe NilC (EpsC . Sym) $ rangeMatch range c]
 -- Is this justified?
 dC c (AltX x y) (AltC x' y') = AltC <$> dC c x x' <*> dC c y y'
+-}
 
 
 vS :: ReS1 x -> Bool
@@ -257,12 +264,12 @@ meld = undefined
 s = Set.singleton
 
 push :: Char -> ReE Range x y -> Cursors x y -> Cursors x y
-push c (SymE range) (C.Eps x) = C.Nil $ Set.map (const $ undefined AfterSym) x
+push c (SymE range) C.Before = maybe (C.Nil $ s $ R.SymError GotWrong) (C.Eps . s . R.Sym) $ rangeMatch range c
+push c (SymE range) (C.Eps x) = C.Nil $ Set.map (const $ R.SymError AfterSym) x
 -- Shan't happen, yet..  (Though, we'll need it for not, later..)
 push c _ (C.Eps x) = C.Nil $ Set.map (error "Can't create Nil from Eps in the general case, yet.") x 
 push c _ (C.Nil e) = C.Nil e
 
-push c (SymE range) C.Before = maybe (C.Nil $ s $ _ GotWrong) (C.Eps . s . _ . Sym) $ rangeMatch range c
 push c (AltE l r) C.Before = undefined
 
 main = return ()

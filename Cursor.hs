@@ -7,31 +7,33 @@ module Cursor where
 import Types
 import qualified Data.Set as Set
 import Data.Set (Set)
+import qualified Result as R
+import Result (Result())
 
+
+-- Cursor will need to come with a history (ie partial result)
+-- we will merge history (eg via `const') for equal cursors.
+-- But we'll need to stick the history somewhere.
+-- Can we stick it in the f?
 data Cursor f x y where
     -- = before sym, we need (Eps Sym) and (Nil SymError), too.
     Before :: Cursor f x y
 
-    AltL :: f (Cursor f l le) -> Cursor f (Alt l r) (Cut le re)
-    AltR :: f (Cursor f r re) -> Cursor f (Alt l r) (Cut le re)
-    AltE :: f (Cursor f l le) -> f (Cursor f r re) -> Cursor f (Alt l r) (Cut le re)
-
+    Alt :: f (Cursor f l le) -> f (Cursor f r re) -> Cursor f (Alt l r) (Cut le re)
     Cut :: f (Cursor f l le) -> f (Cursor f r re) -> Cursor f (Cut l r) (Alt le re)
-    CutLE :: f (Cursor f l le) -> Cursor f (Cut l r) (Alt le re)
-    CutRE :: f (Cursor f r re) -> Cursor f (Cut l r) (Alt le re)
 
-    -- hmm, something's missing.
-    SeqL :: f (Cursor f l le) -> Cursor f (Seq l r) (Alt le (Seq l re))
-    SeqR :: f (Cursor f r re) -> Cursor f (Seq l r) (Alt le (Seq l re))
+    Seq :: f (Cursor f l le) -> f (Cursor f r re) -> Cursor f (Seq l r) (Alt le (Seq l re))
     
     Not :: f (Cursor f x e) -> Cursor f e x
+    Rep :: f (Cursor f x e) -> Cursor f (Rep x) (Seq (Rep x) e) 
 
-    -- Not quite sure..
+    -- Not quite sure..  We need to keep Results (== history) and Cursors separate.
+    -- Cursors are keys, Results are values.
+    -- Eps == After.
+    -- Eps :: f () -> Cursor f x y
     Eps :: f (Result x) -> Cursor f x y
+    -- Nil :: f () -> Cursor f x y
     Nil :: f (Result y) -> Cursor f x y
-
-data Result x = Weird
-    deriving (Eq, Ord, Show)
 
 {-
 data ReC x where
