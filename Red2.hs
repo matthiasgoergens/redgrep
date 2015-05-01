@@ -1,11 +1,11 @@
 {-# LANGUAGE GADTs,TupleSections,TemplateHaskell,ViewPatterns #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE DeriveFunctor, OverlappingInstances #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 import Prelude hiding (sequence, mapM)
 import Data.List (sort)
-import Data.Monoid
+import Data.Monoid hiding (Alt)
 import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Set (Set)
@@ -21,7 +21,6 @@ import Control.Arrow
 import Control.Monad
 
 import Debug.Trace (trace)
-import Data.Bifunctor.Apply
 
 import Types
 import qualified Cursor as C
@@ -75,7 +74,6 @@ v :: ReE f x y -> ReE f x y
 v = either NilE EpsE . v'
 -}
 
-type Range = Maybe [Char]
 
 -- Need to add things coming in.
 -- trans :: Char -> ReE SymResult x y -> ReE Range x y -> ReE SymResult x y

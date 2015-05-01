@@ -2,14 +2,14 @@
 {-# LANGUAGE GADTSyntax #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE DeriveFunctor, OverlappingInstances #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Result (Result(..)) where
 import Types
 import qualified Data.Set as Set
 import Data.Set (Set)
 
-import Data.Monoid
+-- import Data.Monoid 
 import Data.Ord
 
 data Result x where

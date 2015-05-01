@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs,TupleSections,TemplateHaskell,ViewPatterns #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE DeriveFunctor, OverlappingInstances #-}
+{-# LANGUAGE DeriveFunctor #-}
 module Types where
 import Data.Typeable
 
@@ -69,6 +69,14 @@ data ReE f x y where
     EpsE :: x -> ReE f x y
     NilE :: y -> ReE f x y
     FMapE :: (x -> x') -> (y -> y') -> ReE f x y -> ReE f x' y'
+
+type Range = Maybe [Char]
+
+class RE r where
+    sym :: Range -> r
+    alt :: r -> r -> r
+    seq :: r -> r -> r
+    rep :: r -> r
 
 -- back in Char for now.  TODO: make flexible.
 data ReRes x where

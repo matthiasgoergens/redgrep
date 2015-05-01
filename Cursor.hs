@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs,TupleSections,TemplateHaskell,ViewPatterns #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
-{-# LANGUAGE DeriveFunctor, OverlappingInstances #-}
+{-# LANGUAGE DeriveFunctor #-}
 
 module Cursor where
 import Types
