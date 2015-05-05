@@ -4,6 +4,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 
 import Prelude hiding (sequence, mapM)
+import Util
 import Data.List (sort)
 import Data.Monoid hiding (Alt)
 import Data.Maybe (isJust)
@@ -80,11 +81,6 @@ v = either NilE EpsE . v'
 -- trans c (SymE res) (SymE range) = SymE $ case (res, range) of
 --    (Nothing, _) -> Nothing
 
-rangeMatch :: Range -> Char -> Maybe Char
-rangeMatch Nothing c = Just c
-rangeMatch (Just as) c
-    | c `elem` as = Just c
-    | otherwise = Nothing
 
 {-
 d :: Char -> ReE Range x y -> ReE Range x y
