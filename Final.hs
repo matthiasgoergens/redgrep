@@ -81,9 +81,10 @@ instance Functor (Backtrack y x f) where
         b fail (succ . g)
 
 -- The failure branch is a bit iffy.
-instance Monoid f => Applicative (Backtrack y x f) where
+instance (Monoid f) => Applicative (Backtrack y x f) where
     pure x = eps mempty x
-    fn <*> res = bifun fail (\(Seq f a) -> f a) $ fn `seq` res where
+    (<*>) = ap'
+ap' fn res = bifun fail (\(Seq f a) -> f a) $ fn `seq` res where
         fail (AltL f) = f
         fail (AltR (Seq _ f)) = f
         fail (AltB fa (Seq _ fb)) = fa `mappend` fb
