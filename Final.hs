@@ -48,7 +48,7 @@ class Eps r where
 class Nil r where
     nil :: f -> r f s
 
-bifun :: (f -> f') -> (s -> s') -> Backtrack y x f s -> Backtrack y x f' s'
+-- bifun :: (f -> f') -> (s -> s') -> Backtrack y x f s -> Backtrack y x f' s'
 bifun h g = not . fmap h . not . fmap g
 
 instance IsString (Backtrack y x () String) where
