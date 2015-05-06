@@ -81,6 +81,7 @@ instance Functor (Backtrack y x f) where
         b fail (succ . g)
 
 -- The failure branch is a bit iffy.
+-- Nothing Backtrack specific.
 instance (Monoid f) => Applicative (Backtrack y x f) where
     pure x = eps mempty x
     (<*>) = ap'
