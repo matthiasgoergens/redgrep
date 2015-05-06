@@ -78,7 +78,15 @@ _ +++ b = b
 -- instead of error.
 instance Functor (Backtrack y x f) where
     fmap g (Backtrack b) = Backtrack $ \fail succ ->
-        b fail (succ . g) 
+        b fail (succ . g)
+
+-- The failure branch is a bit iffy.
+instance Monoid f => Applicative (Backtrack y x f) where
+    pure x = eps mempty x
+    fn <*> res = bifun fail (\(Seq f a) -> f a) $ fn `seq` res where
+        fail (AltL f) = f
+        fail (AltR (Seq _ f)) = f
+        fail (AltB fa (Seq _ fb)) = fa `mappend` fb
 
 instance Sym (Backtrack y x) where
     sym range = Backtrack $ \f s str ->
