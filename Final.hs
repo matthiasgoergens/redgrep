@@ -26,8 +26,8 @@ data RepI a = Rep [a]
 type Range = Maybe [Char]
 
 -- r = representation
--- s = success
 -- f = failure
+-- s = success
 class Ini r where
     ini :: r f s
 
