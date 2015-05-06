@@ -49,9 +49,7 @@ class Nil r where
     nil :: f -> r f s
 
 bifun :: (f -> f') -> (s -> s') -> Backtrack y x f s -> Backtrack y x f' s'
--- bifun h g = not . fmap h . not . fmap g
-bifun h g (Backtrack b) = Backtrack $ \f s ->
-    b (f . h) (s . g) 
+bifun h g = not . fmap h . not . fmap g
 
 instance IsString (Backtrack y x () String) where
     fromString = string
@@ -79,7 +77,9 @@ _ +++ b = b
 -- Need to swap all arguments, to make the functor work on the Right result.
 -- instead of error.
 instance Functor (Backtrack y x f) where
-    fmap = bifun id
+    fmap g (Backtrack b) = Backtrack $ \fail succ ->
+        b fail (succ . g) 
+
 instance Sym (Backtrack y x) where
     sym range = Backtrack $ \f s str ->
         firstRight (f Before str) $
