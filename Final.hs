@@ -89,6 +89,15 @@ ap' fn res = bifun fail (\(Seq f a) -> f a) $ fn `seq` res where
         fail (AltR (Seq _ f)) = f
         fail (AltB fa (Seq _ fb)) = fa `mappend` fb
 
+-- Nothing Backtrack specific.
+instance (Monoid f, Monoid s) => Monoid (Backtrack y x f s) where
+    mempty = nil mempty
+    mappend a b = bifun fail succ $ a `alt` b where
+        fail (Cut a b) = mappend a b
+        succ (AltL a) = a
+        succ (AltR b) = b
+        succ (AltB a b) = mappend a b
+
 instance Sym (Backtrack y x) where
     sym range = Backtrack $ \f s str ->
         firstRight (f Before str) $
