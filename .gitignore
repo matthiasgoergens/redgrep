@@ -2,10 +2,13 @@ dist
 cabal-dev
 *.o
 *.hi
+*.dyn_hi
+*.dyn_o
 *.chi
 *.chs.h
 .virtualenv
 .hsenv
 .cabal-sandbox/
+*.swp
 cabal.sandbox.config
 cabal.config
