@@ -150,6 +150,8 @@ instance Eps (Backtrack y x) where
 --        firstRight (f Before str) $
     eps err val = Backtrack $ \fcont scont str ->
         scont val str +++ fcont err str
+instance Nil (Backtrack y x) where
+    nil err = Backtrack $ \fcont scont -> fcont err
         
 evalB :: Backtrack (Maybe f) s f s -> String -> Either (Maybe f) s
 evalB (Backtrack fn) = fn fail succ where
