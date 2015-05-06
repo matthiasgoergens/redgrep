@@ -12,7 +12,17 @@ import Util
 import Data.List
 import Data.String
 
-data SymE = Before | Wrong Char Range | TooMany
+{-
+Progress here:
+    - composability solves expression problem.  Since our reg-ex language has quite a few elements,
+    this makes exploratory implementation easier!
+    - Functor instance was no problem at all.  (I think I only had problems with this at first,
+    when I didn't really know how to use GADTs and phantom types properly in the `Initial' version.
+    - Applicative's pure gives me problem because of my non-uni / multi error type.
+    - We'd need a bi-Applicative, and a bi-functor.
+-}
+
+data SymE = Before | Wrong Range Char | TooMany
     deriving (Eq, Ord, Show)
 data AltI a b = AltL a | AltR b | AltB a b
     deriving (Eq, Ord, Show)
@@ -53,9 +63,13 @@ bifun h g = not . fmap h . not . fmap g
 
 instance IsString (Backtrack y x () String) where
     fromString = string
+instance IsString (Push () String) where
+    fromString = string
 
 string ::
-    String -> Backtrack y x () String
+    (Functor (r String), Functor (r (AltI SymE (SeqI Char ()))),
+     Sym r, Seq r, Not r, Eps r) =>
+    String -> r () String
 string s = foldr h (eps () []) s where
     h char r = bifun fail succ $ seq (c char) r
     succ (Seq c r) = c : r
@@ -66,10 +80,69 @@ string s = foldr h (eps () []) s where
 
 newtype Backtrack y x f s = Backtrack ((f -> String -> Either y x) -> (s -> String -> Either y x) -> String -> Either y x)
 
+-- that's almost the state monad?
+-- But, this doesn't allow us to _unify_ two strands!
+-- We need more internal structure for that. (Or don't we, because when we implement,
+-- we can look into the internal structure?)
+data Push f s = Push { now :: Either f s
+                     , next :: Char -> Push f s }
+-- I think we can introduce IDs for union-ing non-deterministic choice
+-- and use the type system to help us only compare like with like.
+-- in Push, the (->) hides all the state.
+evalP :: Push f s -> String -> Either f s
+evalP push str = now $ foldl next push str
+instance Nil Push where
+    nil err = let me = Push { now = Left err, next = const me } in me
+instance Eps Push where
+    eps err succ = Push { now = Right succ, next = const $ nil err }
+instance Not Push where
+    not a = Push { now = switch $ now a
+                 , next = not . next a
+                 }
+instance Functor (Push f) where
+    fmap g a = Push { now = fmap g $ now a
+                    , next = fmap g . next a
+                    }
+instance Sym Push where
+    sym range = Push
+        { now = Left Before
+        , next = \x ->
+            case rangeMatch range x of
+                Just x -> eps TooMany x
+                Nothing -> nil $ Wrong range x
+        }
+-- We need to be able to tag with history, and unify.
+-- Seq Push has the full convolution.
+instance Seq Push where
+    seq a b = Push
+        { now = case (now a, now b) of
+            (Right a, Right b) -> Right (Seq a b)
+            (Left a, _) -> Left (AltL a)
+            (Right a, Left b) -> Left (AltR (Seq a b))
+        , next = 
+            let b' = case now a of
+                        Left a -> const (nil (AltL a)) b
+                        Right a -> bifun (AltR . Seq a) (Seq a) $ b
+                fail (Cut a b) = a
+                succ (AltL a) = a
+                succ (AltR b) = b
+                succ (AltB a b) = a
+            in \char -> bifun fail succ $
+                        (next a char `seq` b) `alt`
+                        next b' char
+        }
+instance Alt Push where
+    alt a b = Push
+        { now = case (now a, now b) of
+            (Left a, Left b) -> Left $ Cut a b
+            (Right a, Right b) -> Right $ AltB a b
+            (Right a, Left _) -> Right $ AltL a
+            (Left _, Right b) -> Right (AltR b)
+        , next = \char -> next a char `alt` next b char
+        }
 -- or last Left
 firstRight :: Either a b -> [Either a b] -> Either a b
 firstRight a l = foldr1 (+++) (a : l) where
-
 
 r@(Right _) +++ _ = r
 _ +++ b = b
@@ -106,7 +179,7 @@ instance Sym (Backtrack y x) where
             [] -> []
             (x:xs) -> (case rangeMatch range x of
                 Just x -> s x xs
-                Nothing -> f (Wrong x range) xs) : map (f TooMany) (tails xs)
+                Nothing -> f (Wrong range x) xs) : map (f TooMany) (tails xs)
 instance Seq (Backtrack y x) where
     seq (Backtrack x) (Backtrack y) = Backtrack $ \fcont scont ->
         let sx s_ = y (fcont . AltR . Seq s_) (scont . Seq s_)
@@ -191,6 +264,7 @@ main = do
     print $ evalB hello "he"
     print $ evalB hello "xx"
     print $ evalB hello2 "xe"
+    r $ print $ evalP hello2 "xe"
     print $ evalB hello3 "heeex"
     print $ evalB hello3 "heeee"
     r $ print $ evalB (sym Nothing) "a"
@@ -205,5 +279,6 @@ main = do
                            (rep (s "ab") `seq` (s "a")))
                         $ c 'x')
                     "ababax"
-
-
+    let text :: Push () String
+        text = "hellox"
+    r $ print $ evalP text "hellox"
