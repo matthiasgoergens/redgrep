@@ -1,10 +1,16 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PostfixOperators #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 import Control.Applicative
 import Prelude hiding (seq, not)
 import qualified Prelude as P
 import qualified Types as T
 import Util
 import Data.List
+import Data.String
 
 data SymE = Before | Wrong Char Range | TooMany
     deriving (Eq, Ord, Show)
@@ -38,13 +44,26 @@ class Rep r where
 class Not r where
     not :: r s f -> r f s
 class Eps r where
-    eps :: s -> r s ()
+    eps :: s -> f -> r s f
 class Nil r where
     nil :: f -> r s f
 
 bifun :: (s -> s') -> (f -> f') -> Backtrack x y s f -> Backtrack x y s' f'
 bifun g h (Backtrack b) = Backtrack $ \s f ->
     b (s . g) (f . h)
+
+instance IsString (Backtrack x y String ()) where
+    fromString = string
+
+string ::
+    String -> Backtrack x y String ()
+string s = foldr h (eps [] ()) s where
+    h char r = bifun succ fail $ seq (c char) r
+    succ (Seq c r) = c : r
+    -- TODO: figure out good error reporting
+    fail (AltL l) = ()
+    fail (AltR r) = ()
+    fail (AltB l r) = ()
 
 newtype Backtrack x y s f = Backtrack ((s -> String -> Either x y) -> (f -> String -> Either x y) -> String -> Either x y)
 
@@ -73,14 +92,22 @@ instance Seq (Backtrack x y) where
         let sx s_ = y (scont . Seq s_) (fcont . AltR . Seq s_)
             fx ff = fcont $ AltL ff
         in x sx fx
-
+cutD x y = not $ alt (not x) (not y)
+instance Cut (Backtrack x y) where
+    -- de morgan
+    -- cut x y = not $ alt (not x) (not y)
+    -- This is wrong.  We'd need to check whether both match at the same time.
+    cut (Backtrack x) (Backtrack y) = Backtrack $ \scont fcont str ->
+        x (\val _ -> y  (scont . Cut val) (fcont . AltR) str)
+          (fcont . AltL)
+          str
 instance Alt (Backtrack x y) where
     alt (Backtrack x) (Backtrack y) = Backtrack $ \scont fcont str ->
         x (scont . AltL)
           (\err _ -> y (scont . AltR) (fcont . Cut err) str)
           str
 instance Rep (Backtrack x y) where
-    rep x = bifun sf ff $ alt (eps $ Rep []) (seq x $ rep x) where
+    rep x = bifun sf ff $ alt (eps (Rep []) ()) (seq x $ rep x) where
         sf (AltL r) = r
         sf (AltR (Seq a (Rep b))) = Rep (a:b)
         sf (AltB r _) = r
@@ -101,8 +128,8 @@ instance Not (Backtrack x y) where
     not (Backtrack f) = Backtrack $ flip f
 instance Eps (Backtrack x y) where
 --        firstRight (f Before str) $
-    eps orig = Backtrack $ \scont fcont str ->
-        scont orig str +++ fcont () str
+    eps orig err = Backtrack $ \scont fcont str ->
+        scont orig str +++ fcont err str
         
 evalB :: Backtrack (Maybe f) s s f -> String -> Either (Maybe f) s
 evalB (Backtrack fn) = fn succ fail where
@@ -120,13 +147,19 @@ xh = sym (Just "xh")
 hello :: (Sym r, Seq r) => r (SeqI Char Char) (AltI SymE (SeqI Char SymE))
 hello = c 'h' `seq` c 'e'
 
-hello2 :: (Sym r, Seq r, Not r) => r (SeqI SymE Char) (AltI Char (SeqI SymE SymE))
+-- hello2 :: (Sym r, Seq r, Not r) => r (SeqI SymE Char) (AltI Char (SeqI SymE SymE))
 hello2 = not (c 'h') `seq` c 'e'
 
-hello3 :: (Rep r, Sym r, Seq r, Not r) => r (SeqI Char (RepI Char)) (AltI SymE (SeqI Char (SeqI (RepI Char) SymE)))
+-- hello3 :: (Rep r, Sym r, Seq r, Not r) => r (SeqI Char (RepI Char)) (AltI SymE (SeqI Char (SeqI (RepI Char) SymE)))
 hello3 = (c 'h') `seq` rep (c 'e')
 
 -- optional :: (Alt r, Eps r) => r (AltI () Char) (CutI 
+
+r b = putStr "R " >> b
+l b = putStr "L " >> b
+
+xTest = rep "hello world "
+
 
 main = do
     print $ evalB (sym (Just "xh")) "xhello"
@@ -135,8 +168,17 @@ main = do
     print $ evalB hello2 "xe"
     print $ evalB hello3 "heeex"
     print $ evalB hello3 "heeee"
-    print $ evalB (sym Nothing) "a"
-    print $ evalB (rep (sym Nothing)) "aaaa"
-    print $ evalB (eps ('a' :: Char) `alt` c 'x') ""
+    r $ print $ evalB (sym Nothing) "a"
+    r $ print $ evalB (rep (sym Nothing)) "aaaa"
+    r $ print $ evalB (eps 12 () `alt` c 'x') ""
+    let s = string
+    r $ print $ evalB (seq ((s "a" `seq` rep (s "ba")) `cut`
+                           (rep (s "ab") `seq` (s "a")))
+                        $ c 'x')
+                    "ababax"
+    r $ print $ evalB (seq ((s "a" `seq` rep (s "ba")) `cutD`
+                           (rep (s "ab") `seq` (s "a")))
+                        $ c 'x')
+                    "ababax"
 
 
