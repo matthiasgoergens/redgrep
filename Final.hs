@@ -29,43 +29,44 @@ type Range = Maybe [Char]
 -- s = success
 -- f = failure
 class Ini r where
-    ini :: r s f
+    ini :: r f s
 
 class Sym r where
-    sym :: Range -> r Char SymE
+    sym :: Range -> r SymE Char
 class Alt r where
-    alt :: r s f -> r s' f' -> r (AltI s s') (CutI f f')
+    alt :: r f s -> r f' s' -> r (CutI f f') (AltI s s')
 class Cut r where
-    cut :: r s f -> r s' f' -> r (CutI s s') (AltI f f')
+    cut :: r f s -> r f' s' -> r (AltI f f') (CutI s s')
 class Seq r where
-    seq :: r s f -> r s' f' -> r (SeqI s s') (AltI f (SeqI s f'))
+    seq :: r f s -> r f' s' -> r (AltI f (SeqI s f')) (SeqI s s') 
 class Rep r where
-    rep :: r s f -> r (RepI s) (SeqI (RepI s) f)
+    rep :: r f s -> r (SeqI (RepI s) f) (RepI s)
 class Not r where
     not :: r s f -> r f s
 class Eps r where
-    eps :: s -> f -> r s f
+    eps :: f -> s -> r f s
 class Nil r where
-    nil :: f -> r s f
+    nil :: f -> r f s
 
-bifun :: (s -> s') -> (f -> f') -> Backtrack x y s f -> Backtrack x y s' f'
-bifun g h (Backtrack b) = Backtrack $ \s f ->
-    b (s . g) (f . h)
+bifun :: (f -> f') -> (s -> s') -> Backtrack y x f s -> Backtrack y x f' s'
+-- bifun h g = not . fmap h . not . fmap g
+bifun h g (Backtrack b) = Backtrack $ \f s ->
+    b (f . h) (s . g) 
 
-instance IsString (Backtrack x y String ()) where
+instance IsString (Backtrack y x () String) where
     fromString = string
 
 string ::
-    String -> Backtrack x y String ()
-string s = foldr h (eps [] ()) s where
-    h char r = bifun succ fail $ seq (c char) r
+    String -> Backtrack y x () String
+string s = foldr h (eps () []) s where
+    h char r = bifun fail succ $ seq (c char) r
     succ (Seq c r) = c : r
     -- TODO: figure out good error reporting
     fail (AltL l) = ()
     fail (AltR r) = ()
     fail (AltB l r) = ()
 
-newtype Backtrack x y s f = Backtrack ((s -> String -> Either x y) -> (f -> String -> Either x y) -> String -> Either x y)
+newtype Backtrack y x f s = Backtrack ((f -> String -> Either y x) -> (s -> String -> Either y x) -> String -> Either y x)
 
 -- or last Left
 firstRight :: Either a b -> [Either a b] -> Either a b
@@ -77,37 +78,37 @@ _ +++ b = b
 
 -- Need to swap all arguments, to make the functor work on the Right result.
 -- instead of error.
-instance Functor (Backtrack x y s) where
-    fmap f = bifun id f
-instance Sym (Backtrack x y) where
-    sym range = Backtrack $ \s f str ->
+instance Functor (Backtrack y x f) where
+    fmap = bifun id
+instance Sym (Backtrack y x) where
+    sym range = Backtrack $ \f s str ->
         firstRight (f Before str) $
         case str of
             [] -> []
             (x:xs) -> (case rangeMatch range x of
                 Just x -> s x xs
                 Nothing -> f (Wrong x range) xs) : map (f TooMany) (tails xs)
-instance Seq (Backtrack x y) where
-    seq (Backtrack x) (Backtrack y) = Backtrack $ \scont fcont ->
-        let sx s_ = y (scont . Seq s_) (fcont . AltR . Seq s_)
+instance Seq (Backtrack y x) where
+    seq (Backtrack x) (Backtrack y) = Backtrack $ \fcont scont ->
+        let sx s_ = y (fcont . AltR . Seq s_) (scont . Seq s_)
             fx ff = fcont $ AltL ff
-        in x sx fx
+        in x fx sx
 cutD x y = not $ alt (not x) (not y)
 instance Cut (Backtrack x y) where
     -- de morgan
     -- cut x y = not $ alt (not x) (not y)
     -- This is wrong.  We'd need to check whether both match at the same time.
-    cut (Backtrack x) (Backtrack y) = Backtrack $ \scont fcont str ->
-        x (\val _ -> y  (scont . Cut val) (fcont . AltR) str)
-          (fcont . AltL)
+    cut (Backtrack x) (Backtrack y) = Backtrack $ \fcont scont str ->
+        x (fcont . AltL)
+          (\val _ -> y (fcont . AltR) (scont . Cut val) str)
           str
-instance Alt (Backtrack x y) where
-    alt (Backtrack x) (Backtrack y) = Backtrack $ \scont fcont str ->
-        x (scont . AltL)
-          (\err _ -> y (scont . AltR) (fcont . Cut err) str)
+instance Alt (Backtrack y x) where
+    alt (Backtrack x) (Backtrack y) = Backtrack $ \fcont scont str ->
+        x (\err _ -> y (fcont . Cut err) (scont . AltR) str)
+          (scont . AltL)
           str
-instance Rep (Backtrack x y) where
-    rep x = bifun sf ff $ alt (eps (Rep []) ()) (seq x $ rep x) where
+instance Rep (Backtrack y x) where
+    rep x = bifun ff sf $ alt (eps () (Rep [])) (seq x $ rep x) where
         sf (AltL r) = r
         sf (AltR (Seq a (Rep b))) = Rep (a:b)
         sf (AltB r _) = r
@@ -124,34 +125,37 @@ switch :: Either a b -> Either b a
 switch (Left a) = Right a
 switch (Right b) = Left b
 
-instance Not (Backtrack x y) where
+instance Not (Backtrack y x) where
     not (Backtrack f) = Backtrack $ flip f
-instance Eps (Backtrack x y) where
+instance Eps (Backtrack y x) where
 --        firstRight (f Before str) $
-    eps orig err = Backtrack $ \scont fcont str ->
-        scont orig str +++ fcont err str
+    eps err val = Backtrack $ \fcont scont str ->
+        scont val str +++ fcont err str
         
-evalB :: Backtrack (Maybe f) s s f -> String -> Either (Maybe f) s
-evalB (Backtrack fn) = fn succ fail where
+evalB :: Backtrack (Maybe f) s f s -> String -> Either (Maybe f) s
+evalB (Backtrack fn) = fn fail succ where
     succ val [] = Right val
     succ _ _ = Left Nothing
     fail err [] = Left (Just err)
     fail _ _ = Left Nothing
 
 
-c :: (Sym r) => Char -> r Char SymE
+c :: (Sym r) => Char -> r SymE Char
 c x = sym . pure . pure $ x
-xh :: Sym r => r Char SymE
+xh :: Sym r => r SymE Char
 xh = sym (Just "xh")
 
-hello :: (Sym r, Seq r) => r (SeqI Char Char) (AltI SymE (SeqI Char SymE))
+hello :: (Sym r, Seq r) => r (AltI SymE (SeqI Char SymE)) (SeqI Char Char)
 hello = c 'h' `seq` c 'e'
 
--- hello2 :: (Sym r, Seq r, Not r) => r (SeqI SymE Char) (AltI Char (SeqI SymE SymE))
+hello2 :: (Sym r, Seq r, Not r) => r (AltI Char (SeqI SymE SymE)) (SeqI SymE Char)
 hello2 = not (c 'h') `seq` c 'e'
 
--- hello3 :: (Rep r, Sym r, Seq r, Not r) => r (SeqI Char (RepI Char)) (AltI SymE (SeqI Char (SeqI (RepI Char) SymE)))
+hello3 :: (Sym r, Seq r, Rep r) =>
+    r (AltI SymE (SeqI Char (SeqI (RepI Char) SymE)))
+      (SeqI Char (RepI Char))
 hello3 = (c 'h') `seq` rep (c 'e')
+
 
 -- optional :: (Alt r, Eps r) => r (AltI () Char) (CutI 
 
