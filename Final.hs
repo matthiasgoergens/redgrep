@@ -11,6 +11,8 @@ import qualified Types as T
 import Util
 import Data.List
 import Data.String
+import Data.Biapplicative
+import Data.Bifunctor
 
 {-
 Progress here:
