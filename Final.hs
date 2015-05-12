@@ -4,7 +4,10 @@
 {-# LANGUAGE PostfixOperators #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ExistentialQuantification #-}
+module Final where
 import Control.Applicative
+import Control.Monad
 import Prelude hiding (seq, not)
 import qualified Prelude as P
 import qualified Types as T
@@ -65,8 +68,6 @@ bifun h g = not . fmap h . not . fmap g
 
 instance IsString (Backtrack y x () String) where
     fromString = string
-instance IsString (Push () String) where
-    fromString = string
 
 string ::
     (Functor (r String), Functor (r (AltI SymE (SeqI Char ()))),
@@ -82,66 +83,78 @@ string s = foldr h (eps () []) s where
 
 newtype Backtrack y x f s = Backtrack ((f -> String -> Either y x) -> (s -> String -> Either y x) -> String -> Either y x)
 
--- that's almost the state monad?
--- But, this doesn't allow us to _unify_ two strands!
--- We need more internal structure for that. (Or don't we, because when we implement,
--- we can look into the internal structure?)
-data Push f s = Push { now :: Either f s
-                     , next :: Char -> Push f s }
--- I think we can introduce IDs for union-ing non-deterministic choice
--- and use the type system to help us only compare like with like.
--- in Push, the (->) hides all the state.
-evalP :: Push f s -> String -> Either f s
-evalP push str = now $ foldl next push str
-instance Nil Push where
-    nil err = let me = Push { now = Left err, next = const me } in me
-instance Eps Push where
-    eps err succ = Push { now = Right succ, next = const $ nil err }
-instance Not Push where
-    not a = Push { now = switch $ now a
-                 , next = not . next a
-                 }
-instance Functor (Push f) where
-    fmap g a = Push { now = fmap g $ now a
-                    , next = fmap g . next a
-                    }
-instance Sym Push where
-    sym range = Push
-        { now = Left Before
-        , next = \x ->
-            case rangeMatch range x of
-                Just x -> eps TooMany x
-                Nothing -> nil $ Wrong range x
-        }
--- We need to be able to tag with history, and unify.
--- Seq Push has the full convolution.
-instance Seq Push where
-    seq a b = Push
-        { now = case (now a, now b) of
-            (Right a, Right b) -> Right (Seq a b)
-            (Left a, _) -> Left (AltL a)
-            (Right a, Left b) -> Left (AltR (Seq a b))
-        , next = 
-            let b' = case now a of
-                        Left a -> const (nil (AltL a)) b
-                        Right a -> bifun (AltR . Seq a) (Seq a) $ b
-                fail (Cut a b) = a
-                succ (AltL a) = a
-                succ (AltR b) = b
-                succ (AltB a b) = a
-            in \char -> bifun fail succ $
-                        (next a char `seq` b) `alt`
-                        next b' char
-        }
-instance Alt Push where
-    alt a b = Push
-        { now = case (now a, now b) of
-            (Left a, Left b) -> Left $ Cut a b
-            (Right a, Right b) -> Right $ AltB a b
-            (Right a, Left _) -> Right $ AltL a
-            (Left _, Right b) -> Right (AltR b)
-        , next = \char -> next a char `alt` next b char
-        }
+{-
+-- Fun with phantom types.
+data Dedup f s = forall ph . Dedup 
+    { states :: State ph f s
+    , merge :: State ph f s -> State ph f s -> State ph f s
+    , eq :: State ph f s -> State ph f s -> Bool -- Could also do Ord?
+    }
+data State ph f s = State { hnow :: Either f s
+                          , hnext :: Char -> State ph f s
+                          }
+h = State (Left ()) (const h)
+dd a = Dedup h const (\_ _ -> False)
+{-
+let x = dd undefined
+let y = dd undefined
+
+-}
+
+instance Sym Dedup where
+--     sym range = Dedup
+--         { states = State
+--             { hnow = Left Before
+--             , hnext = \x ->
+--                 case rangeMatch range x of
+--                     Just x -> eps TooMany x
+--                     Nothing -> nil $ Wrong range x
+--             }
+--         , merge = undefined
+--         , eq = undefined
+--         }
+instance Nil Dedup  where
+instance Eps Dedup where
+
+-}
+{-
+-- Looks like that will sort-of work.
+*Main> let f (Dedup h m e) = hnext h 'a'
+
+<interactive>:16:23:
+    Couldn't match expected type ‘t’ with actual type ‘Hidden ph t1 t2’
+      because type variable ‘ph’ would escape its scope
+    This (rigid, skolem) type variable is bound by
+      a pattern with constructor
+        Dedup :: forall f s ph.
+                 Hidden ph f s
+                 -> (Hidden ph f s -> Hidden ph f s -> Hidden ph f s)
+                 -> (Hidden ph f s -> Hidden ph f s -> Bool)
+                 -> Dedup f s,
+      in an equation for ‘f’
+      at <interactive>:16:8-18
+    Relevant bindings include
+      e :: Hidden ph t1 t2 -> Hidden ph t1 t2 -> Bool
+        (bound at <interactive>:16:18)
+      m :: Hidden ph t1 t2 -> Hidden ph t1 t2 -> Hidden ph t1 t2
+        (bound at <interactive>:16:16)
+      h :: Hidden ph t1 t2 (bound at <interactive>:16:14)
+      f :: Dedup t1 t2 -> t (bound at <interactive>:16:5)
+    In the expression: hnext h 'a'
+    In an equation for ‘f’: f (Dedup h m e) = hnext h 'a'
+*Main> let f (Dedup h m e) = Dedup (hnext h 'a') m e
+*Main> :t f
+f :: Dedup t t1 -> Dedup t t1
+*Main> let f (Dedup h m e) = Dedup (m (hnext h 'a') (hnext h 'b')) m e
+*Main> :t f
+f :: Dedup t t1 -> Dedup t t1
+*Main> let f a b (Dedup h m e) = Dedup (m (hnext h a) (hnext h b)) m e
+*Main> let f a b (Dedup h m e) = [Dedup (hnext h a) m e, Dedup (hnext h b) m e]
+*Main> :t f
+f :: Char -> Char -> Dedup t t1 -> [Dedup t t1]
+*Main> 
+
+-}
 -- or last Left
 firstRight :: Either a b -> [Either a b] -> Either a b
 firstRight a l = foldr1 (+++) (a : l) where
@@ -166,6 +179,7 @@ instance Monoid f => Applicative (Backtrack y x f) where
 ap' fn res = bifun fail (\(Seq f a) -> f a) $ fn `seq` res where
         fail (AltL f) = f
         fail (AltR (Seq _ f)) = f
+        -- shouldn't happen..
         fail (AltB fa (Seq _ fb)) = fa `mappend` fb
 
 -- Nothing Backtrack specific.
@@ -269,7 +283,6 @@ main = do
     print $ evalB hello "he"
     print $ evalB hello "xx"
     print $ evalB hello2 "xe"
-    r $ print $ evalP hello2 "xe"
     print $ evalB hello3 "heeex"
     print $ evalB hello3 "heeee"
     r $ print $ evalB (sym Nothing) "a"
@@ -284,6 +297,47 @@ main = do
                            (rep (s "ab") `seq` (s "a")))
                         $ c 'x')
                     "ababax"
-    let text :: Push () String
-        text = "hellox"
-    r $ print $ evalP text "hellox"
+
+{-
+data Dup f s = Dup { now :: Either f s
+                   , next :: Char -> Push f s
+                   , state :: ..?
+                   }
+
+--- no, vs start (vs nil)
+seq origa origb = Constructor $ (\context ->
+    let a = singleton origa context
+        b = null origb
+        result = seq' $ result $ origb $ rresult a
+-- d c (Seq a b) = SeqL (d c a) b `union` SeqR (v a) (d c b)
+    let origa' = origa context
+    let push (Dedup _ a' b') char =
+         let a' = push a char context
+             -- rresult :: Stuff -> Either fail succ
+             rresult :: Stuff -> Maybe r
+             rresult = either (const Nothing) Just <=< result
+             -- union should be idempotent.
+             b_ = maybe id (union . origb) (rstate a) b
+             b' = push b_ char
+            (Dedup result a' b')
+        
+        
+
+d :: Eq a => a -> Re a x -> Re a x
+d c (Sym Nothing) = Eps c
+d c (Sym (Just as))
+    | c `elem` as = Eps c
+    | otherwise = Nil
+d c (Alt a b) = Alt (d c a) (d c b)
+d c (Cut a b) = Cut (d c a) (d c b)
+-- This one grows.
+-- d c (Seq a b) = Seq (d c a) b +++ Seq (v a) (d c b)
+d c (Seq a b) = SeqL (d c a) b `union` SeqR (v a) (d c b)
+-- This one grows.
+-- rep a = repR (eps []) a
+d c (Rep a) = seq (d c a) (Rep a)
+d c (Not a) = Not (d c a)
+d _ (Eps _) = Nil
+d _ Nil = Nil
+d c (FMap f x) = FMap f (d c x)
+-}
