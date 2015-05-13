@@ -34,7 +34,6 @@ data Dup collect state f s =
         , merge :: state -> state -> state
         }
 instance Sym (Dup Maybe (Either SymE Char)) where
-    sym
 
 -- instance Eq (Dup collect state f s) where
 -- instance Ord (Dup collect state f s) where
