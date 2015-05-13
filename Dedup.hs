@@ -6,7 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ExistentialQuantification #-}
 import Final hiding (main)
-import Control.Applicative 
+import Control.Applicative hiding (empty)
 import Control.Monad
 import Prelude hiding (seq, not)
 import qualified Prelude as P
@@ -25,15 +25,61 @@ import Data.Bifunctor
     because of non-determinism: state ~ states
 -}
 
+data Context a b = Maybe (a, b)
+
 -- in the beginning: collect = Maybe
 -- But also possible data Collect context x = Maybe (context, x)
 data Dup collect state f s =
     Dup { now :: state -> collect (Either f s)
+        , new :: state
+        , empty :: state
         , next :: Char -> state -> state
         , cmp :: state -> state -> Ordering
         , merge :: state -> state -> state
         }
-instance Sym (Dup Maybe (Either SymE Char)) where
+instance Nil (Dup Maybe (Maybe ())) where
+    nil = Dup
+        { now = fmap Left
+        , new = Just ()
+        , empty = Nothing
+        , next = \char st -> st
+        , cmp = compare
+        , merge = max
+        }
+instance Eps (Dup Maybe (Maybe (Either () ()))) where
+    eps = Dup
+        { now = id
+        , new = Just (Right ())
+        , empty = Nothing
+        , next = \char st -> Left () <$ st
+        , cmp = compare
+        , merge = max
+        }
+rangeMatch' :: Range -> Char -> Either SymE Char
+rangeMatch' range char = maybe (Left $ Wrong range char) Right $ rangeMatch range char
+
+instance Sym (Dup Maybe (Maybe (Either SymE Char))) where
+    sym range = Dup
+        { now = id
+        , new = Just (Left Before)
+        , empty = Nothing
+        , next =
+            let helper char (Left Before) =
+                    maybe (Left $ Wrong range char) Right $ rangeMatch range char
+                helper _ _ = Left TooMany
+            in fmap . helper
+        , cmp = compare
+        -- NB: Only works because Before is maximal constructor of SymE.
+        , merge = max
+        }
+seq' a b = Dup
+    { now = now . snd
+    , new = (new a, empty b)
+    , empty = (empty a, empty b)
+    , next = undefined
+    , cmp = undefined
+    , merge = undefined
+    }
 
 -- instance Eq (Dup collect state f s) where
 -- instance Ord (Dup collect state f s) where
