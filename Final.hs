@@ -27,7 +27,8 @@ Progress here:
     - We'd need a bi-Applicative, and a bi-functor.
 -}
 
-data SymE = Before | Wrong Range Char | TooMany
+-- Before needs to be last, to make merging with max work.
+data SymE = TooMany | Wrong Range Char | Before
     deriving (Eq, Ord, Show)
 data AltI a b = AltL a | AltR b | AltB a b
     deriving (Eq, Ord, Show)

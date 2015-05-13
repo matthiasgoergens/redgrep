@@ -5,6 +5,8 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE NamedFieldPuns #-}
 import Final hiding (main)
 import Control.Applicative hiding (empty)
 import Control.Monad
@@ -16,6 +18,9 @@ import Data.List
 import Data.String
 import Data.Biapplicative
 import Data.Bifunctor
+import Data.Function (on)
+import Data.Ord
+import Control.Arrow ((***))
 
 {-
     :: (state, context)
@@ -29,57 +34,70 @@ data Context a b = Maybe (a, b)
 
 -- in the beginning: collect = Maybe
 -- But also possible data Collect context x = Maybe (context, x)
-data Dup collect state f s =
-    Dup { now :: state -> collect (Either f s)
-        , new :: state
-        , empty :: state
-        , next :: Char -> state -> state
-        , cmp :: state -> state -> Ordering
-        , merge :: state -> state -> state
+data Dup state f s =
+    Dup { now :: forall context . state context -> Maybe (context, Either f s)
+        , new :: forall context . context -> state context
+        , empty :: forall context . state context
+        , next :: forall context . Char -> state context -> state context
+        , cmp :: forall context . state context -> state context -> Ordering
+        , merge :: forall context . state context -> state context -> state context
         }
-instance Nil (Dup Maybe (Maybe ())) where
+-- ((), a) isomorph to a, but I'm trying to see a pattern here.
+newtype Maybe' a context = Maybe' { unMaybe' :: Maybe (context, a) }
+instance Nil (Dup (Maybe' ())) where
     nil = Dup
-        { now = fmap Left
-        , new = Just ()
-        , empty = Nothing
+        { now = fmap (id *** Left) . unMaybe'
+        , new = Maybe' . Just . flip (,) ()
+        , empty = Maybe' $ Nothing
         , next = \char st -> st
-        , cmp = compare
-        , merge = max
+        , cmp = comparing (fmap snd . unMaybe')
+        , merge = \a b -> maximumBy (comparing $ fmap snd . unMaybe') [a,b]
         }
-instance Eps (Dup Maybe (Maybe (Either () ()))) where
+instance Eps (Dup (Maybe' (Either () ()))) where
     eps = Dup
-        { now = id
-        , new = Just (Right ())
-        , empty = Nothing
-        , next = \char st -> Left () <$ st
-        , cmp = compare
-        , merge = max
+        { now = unMaybe'
+        , new = Maybe' . Just . flip (,) (Right ())
+        , empty = Maybe' Nothing
+        , next = \char (Maybe' st) -> Maybe' $ (fmap.(<$)) (Left ()) st
+        , cmp = comparing (fmap snd . unMaybe')
+        , merge = \a b -> maximumBy (comparing $ fmap snd . unMaybe') [a,b]
         }
 rangeMatch' :: Range -> Char -> Either SymE Char
 rangeMatch' range char = maybe (Left $ Wrong range char) Right $ rangeMatch range char
 
-instance Sym (Dup Maybe (Maybe (Either SymE Char))) where
+instance Sym (Dup (Maybe' (Either SymE Char))) where
     sym range = Dup
-        { now = id
-        , new = Just (Left Before)
-        , empty = Nothing
-        , next =
+        { now = unMaybe'
+        , new = Maybe' . Just . flip (,) (Left Before)
+        , empty = Maybe' Nothing
+        , next = \char (Maybe' st) ->
             let helper char (Left Before) =
                     maybe (Left $ Wrong range char) Right $ rangeMatch range char
                 helper _ _ = Left TooMany
-            in fmap . helper
-        , cmp = compare
+            in Maybe' $ (fmap.fmap) (helper char) st
+        , cmp = comparing (fmap snd . unMaybe')
         -- NB: Only works because Before is maximal constructor of SymE.
-        , merge = max
+        , merge = \a b -> maximumBy (comparing $ fmap snd . unMaybe') [a, b]
         }
-seq' a b = Dup
-    { now = now . snd
-    , new = (new a, empty b)
+{-
+-- seq_ :: Dup state f s -> Dup stateB fB sB
+    -- -> Dup (state, stateB) (AltI f (SeqI s f')) (SeqI s s')
+seq_ a b = Dup
+    { now = now b . snd -- a lie!
+    , new = \c -> (new a c, empty b)
     , empty = (empty a, empty b)
-    , next = undefined
+    , next = \char (sta, stb) ->
+        let nb = next b char $
+                    case now a sta of
+                      Just (c, Right sa) -> merge b (new b _) stb
+                      -- Just (c, Right sa) -> merge b (new b (c, sa)) stb
+                      _ -> stb
+            na = next a char sta
+        in (na, nb)
     , cmp = undefined
     , merge = undefined
     }
+-}
 
 -- instance Eq (Dup collect state f s) where
 -- instance Ord (Dup collect state f s) where
