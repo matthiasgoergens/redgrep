@@ -74,6 +74,9 @@ instance IsString (Backtrack y x () String) where
 eps_ :: (Bifun r, Eps r) => f -> s -> r f s
 eps_ f s = bifun (const f) (const s) eps
 
+nil_ :: (Bifun r, Nil r) => f -> r f s
+nil_ f = bifun (const f) undefined nil
+
 string ::
     (Bifun r, Functor (r ()), Functor (r [Char]), Functor (r (AltI SymE (SeqI Char ()))),
      Sym r, Seq r, Not r, Eps r) =>

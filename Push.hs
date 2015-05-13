@@ -29,13 +29,15 @@ data Push f s = Push { now :: Either f s
 evalP :: Push f s -> String -> Either f s
 evalP push str = now $ foldl next push str
 instance Nil Push where
-    nil err = let me = Push { now = Left err, next = const me } in me
+    nil = let me = Push { now = Left (), next = const me } in me
 instance Eps Push where
-    eps err succ = Push { now = Right succ, next = const $ nil err }
+    eps = Push { now = Right (), next = const $ nil }
 instance Not Push where
     not a = Push { now = switch $ now a
                  , next = not . next a
                  }
+instance Bifun Push where
+    bifun h g = not . fmap h . not . fmap g
 instance Functor (Push f) where
     fmap g a = Push { now = fmap g $ now a
                     , next = fmap g . next a
@@ -45,8 +47,8 @@ instance Sym Push where
         { now = Left Before
         , next = \x ->
             case rangeMatch range x of
-                Just x -> eps TooMany x
-                Nothing -> nil $ Wrong range x
+                Just x -> eps_ TooMany x
+                Nothing -> nil_ $ Wrong range x
         }
 -- We need to be able to tag with history, and unify.
 -- Seq Push has the full convolution.
@@ -58,7 +60,7 @@ instance Seq Push where
             (Right a, Left b) -> Left (AltR (Seq a b)) 
         , next =  
             let b' = case now a of 
-                        Left a -> const (nil (AltL a)) b 
+                        Left a -> const (nil_ (AltL a)) b 
                         Right a -> bifun (AltR . Seq a) (Seq a) $ b 
                 fail (Cut a b) = a 
                 succ (AltL a) = a
