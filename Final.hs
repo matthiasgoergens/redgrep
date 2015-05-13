@@ -59,21 +59,26 @@ class Rep r where
 class Not r where
     not :: r s f -> r f s
 class Eps r where
-    eps :: f -> s -> r f s
+    eps :: r () ()
 class Nil r where
-    nil :: f -> r f s
+    nil :: r () s
+class Bifun r where
+    bifun :: (f -> f') -> (s -> s') -> r f s -> r f' s'
 
--- bifun :: (f -> f') -> (s -> s') -> Backtrack y x f s -> Backtrack y x f' s'
-bifun h g = not . fmap h . not . fmap g
+instance Bifun (Backtrack y x) where
+    bifun h g = not . fmap h . not . fmap g
 
 instance IsString (Backtrack y x () String) where
     fromString = string
 
+eps_ :: (Bifun r, Eps r) => f -> s -> r f s
+eps_ f s = bifun (const f) (const s) eps
+
 string ::
-    (Functor (r String), Functor (r (AltI SymE (SeqI Char ()))),
+    (Bifun r, Functor (r ()), Functor (r [Char]), Functor (r (AltI SymE (SeqI Char ()))),
      Sym r, Seq r, Not r, Eps r) =>
     String -> r () String
-string s = foldr h (eps () []) s where
+string s = foldr h (eps_ () []) s where
     h char r = bifun fail succ $ seq (c char) r
     succ (Seq c r) = c : r
     -- TODO: figure out good error reporting
@@ -174,7 +179,7 @@ instance Bifunctor (Backtrack y x) where
     bimap f s (Backtrack b) = Backtrack $ \fail succ ->
         b (fail . f) (succ . s)
 instance Monoid f => Applicative (Backtrack y x f) where
-    pure = eps mempty
+    pure = eps_ mempty
     (<*>) = ap'
 ap' fn res = bifun fail (\(Seq f a) -> f a) $ fn `seq` res where
         fail (AltL f) = f
@@ -184,7 +189,7 @@ ap' fn res = bifun fail (\(Seq f a) -> f a) $ fn `seq` res where
 
 -- Nothing Backtrack specific.
 instance (Monoid f, Monoid s) => Monoid (Backtrack y x f s) where
-    mempty = nil mempty
+    mempty = bifun (const mempty) undefined nil
     mappend a b = bifun fail succ $ a `alt` b where
         fail (Cut a b) = mappend a b
         succ (AltL a) = a
@@ -219,7 +224,7 @@ instance Alt (Backtrack y x) where
           (scont . AltL)
           str
 instance Rep (Backtrack y x) where
-    rep x = bifun ff sf $ alt (eps () (Rep [])) (seq x $ rep x) where
+    rep x = bifun ff sf $ alt (eps_ () (Rep [])) (seq x $ rep x) where
         sf (AltL r) = r
         sf (AltR (Seq a (Rep b))) = Rep (a:b)
         sf (AltB r _) = r
@@ -240,10 +245,10 @@ instance Not (Backtrack y x) where
     not (Backtrack f) = Backtrack $ flip f
 instance Eps (Backtrack y x) where
 --        firstRight (f Before str) $
-    eps err val = Backtrack $ \fcont scont str ->
-        scont val str +++ fcont err str
+    eps = Backtrack $ \fcont scont str ->
+        scont () str +++ fcont () str
 instance Nil (Backtrack y x) where
-    nil err = Backtrack $ \fcont scont -> fcont err
+    nil = Backtrack $ \fcont scont -> fcont ()
         
 evalB :: Backtrack (Maybe f) s f s -> String -> Either (Maybe f) s
 evalB (Backtrack fn) = fn fail succ where
@@ -287,7 +292,7 @@ main = do
     print $ evalB hello3 "heeee"
     r $ print $ evalB (sym Nothing) "a"
     r $ print $ evalB (rep (sym Nothing)) "aaaa"
-    r $ print $ evalB (eps 12 () `alt` c 'x') ""
+    r $ print $ evalB (eps_ 12 () `alt` c 'x') ""
     let s = string
     r $ print $ evalB (seq ((s "a" `seq` rep (s "ba")) `cut`
                            (rep (s "ab") `seq` (s "a")))
