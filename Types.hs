@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor #-}
 module Types where
+import qualified Data.Set as Set
 import Data.Typeable
 
 -- Actually, we don't need any constructors for these.
@@ -56,6 +57,7 @@ data ReE f x y where
     -- De Morgan
     AltE :: ReE f x y -> ReE f x' y' -> ReE f (Alt x x') (Cut y y')
     CutE :: ReE f x y -> ReE f x' y' -> ReE f (Cut x x') (Alt y y')
+    Uni :: Set.Set (ReE f x y) -> ReE f x y
     -- Is that error type right?
     -- (Alternative was just Alt y y'
     SeqE :: ReE f x y -> ReE f x' y' -> ReE f (Seq x x') (Either y (Seq x y'))
@@ -69,6 +71,9 @@ data ReE f x y where
     EpsE :: x -> ReE f x y
     NilE :: y -> ReE f x y
     FMapE :: (x -> x') -> (y -> y') -> ReE f x y -> ReE f x' y'
+
+instance Eq (ReE f x y) where
+instance Ord (ReE f x y) where
 
 type Range = Maybe [Char]
 
