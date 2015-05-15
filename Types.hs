@@ -45,6 +45,7 @@ data FMap a x y -- where
 data Re' f = Sym' f | Alt' (Re' f) (Re' f) | Cut' (Re' f) (Re' f)
            | Seq' (Re' f) (Re' f) | Rep' (Re' f) | Not' (Re' f)
            | Eps' | Nil'
+           | Uni' (Re' f) (Re' f) -- (Set.Set (Re' f))
     deriving (Typeable, Eq, Ord, Show)
 
 -- TODO: Add Char as variable.
@@ -52,12 +53,13 @@ data SymError = BeforeSym | GotWrong | AfterSym
     deriving (Eq, Ord, Show)
 
 data ReE f x y where
+    -- Does this have to be in here?
+    UniE :: Set.Set (ReE f x y) -> ReE f x y
     -- Or perhaps different?
     SymE :: f -> ReE f Sym SymError
     -- De Morgan
     AltE :: ReE f x y -> ReE f x' y' -> ReE f (Alt x x') (Cut y y')
     CutE :: ReE f x y -> ReE f x' y' -> ReE f (Cut x x') (Alt y y')
-    Uni :: Set.Set (ReE f x y) -> ReE f x y
     -- Is that error type right?
     -- (Alternative was just Alt y y'
     SeqE :: ReE f x y -> ReE f x' y' -> ReE f (Seq x x') (Either y (Seq x y'))
@@ -68,12 +70,26 @@ data ReE f x y where
     NotE :: ReE f x y -> ReE f y x
     -- NotE :: ReE f x y -> ReE f (Not y) (Not x)
     -- Not quite sure if we don't need a wrapper or so?
-    EpsE :: x -> ReE f x y
-    NilE :: y -> ReE f x y
+    EpsE :: ReE f () ()
+    NilE :: ReE f () ()
+    -- This is giving me trouble when comparing..
     FMapE :: (x -> x') -> (y -> y') -> ReE f x y -> ReE f x' y'
 
-instance Eq (ReE f x y) where
-instance Ord (ReE f x y) where
+instance (Eq f) => Eq (ReE f x y) where
+    (UniE set) == (UniE set') = set == set'
+    (SymE x) == (SymE x') = x == x'
+    (AltE x y) == (AltE x' y') = (x,y) == (x',y')
+    (CutE x y) == (CutE x' y') = (x,y) == (x',y')
+    (SeqE x y) == (SeqE x' y') = (x,y) == (x',y')
+    (RepE x) == (RepE x') = x == x'
+    (NotE x) == (NotE x') = x == x'
+    EpsE == EpsE = True
+    NilE == NilE = True
+    -- Only comparable if they have the same structure?
+    -- Or switch to Re'?
+    -- (FMapE _ _ x) == (FMapE _ _ x') = x == x'
+    _ == _ = False
+instance (Ord f) => Ord (ReE f x y) where
 
 type Range = Maybe [Char]
 

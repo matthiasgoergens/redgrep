@@ -5,6 +5,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Final where
 import Control.Applicative
 import Control.Monad
@@ -16,6 +17,7 @@ import Data.List
 import Data.String
 import Data.Biapplicative
 import Data.Bifunctor
+import Control.Arrow ((***), (&&&))
 
 {-
 Progress here:
@@ -65,6 +67,38 @@ class Nil r where
     nil :: r () s
 class Bifun r where
     bifun :: (f -> f') -> (s -> s') -> r f s -> r f' s'
+
+data Both x y f s = Both { one :: (x f s), two :: (y f s) }
+unBoth = (one &&& two)
+both = uncurry Both
+
+duplicate :: Both l r f s -> Both l r f s
+duplicate (Both l r) = Both l r
+
+instance (Sym l, Sym r) => Sym (Both l r) where
+    sym range = Both (sym range) (sym range)
+instance (Alt l, Alt r) => Alt (Both l r) where
+    alt (Both l l') (Both r r') = Both (alt l r) (alt l' r')
+instance (Cut l, Cut r) => Cut (Both l r) where
+    cut (Both l l') (Both r r') = Both (cut l r) (cut l' r')
+instance (Seq l, Seq r) => Seq (Both l r) where
+    seq (Both l l') (Both r r') = Both (seq l r) (seq l' r')
+
+instance (Rep l, Rep r) => Rep (Both l r) where
+    rep (Both x y) = Both (rep x) (rep y)
+instance (Not l, Not r) => Not (Both l r) where
+    not (Both x y) = Both (not x) (not y)
+instance (Eps l, Eps r) => Eps (Both l r) where
+    eps = Both eps eps
+instance (Nil l, Nil r) => Nil (Both l r) where
+    nil = Both nil nil
+
+instance (Functor (l f), Functor (r f)) => Functor (Both l r f) where
+    fmap fn (Both l r) = Both (fmap fn l) (fmap fn r)
+
+instance (Bifun l, Bifun r) =>  Bifun (Both l r) where
+    bifun h g (Both l r) = Both (bifun h g l) (bifun h g r)
+
 
 instance Bifun (Backtrack y x) where
     bifun h g = not . fmap h . not . fmap g
