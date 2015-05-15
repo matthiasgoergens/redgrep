@@ -58,7 +58,9 @@ instance Bifun (Phantom R) where bifun _ _ (Phantom x) = Phantom x
 
 -- All uni's should be sorted, und unified, eg like Set.
 -- muck around with contexts like for flattening in the paper?
-data NF r f s = NF (Map (Phantom R f s) (r f s))
+data NF r f s = IsNil f | NF (Map (Phantom R f s) (r f s))
+isNil (IsNil f) = True
+isNil _ = False
 -- This is doing
 -- a + a = a
 -- a + b = b + a
@@ -71,31 +73,48 @@ nfOp1 op x = NF $ Map.singleton key val where
     (Both key val) = op (flatten x)
 
 
-flattenForget :: (Uni r) => NF r f s -> r f s
+flattenForget :: (Uni r, Bifun r, Nil r) => NF r f s -> r f s
 flattenForget = two . flatten
--- Only works on non-empty sets!
-flatten :: (Uni r) => NF r f s -> Both (Phantom R) r f s
+-- Only works on non-empty maps!
+-- TODO: filter out the nils, too.
+flatten :: (Uni r, Bifun r, Nil r) => NF r f s -> Both (Phantom R) r f s
 flatten (NF l) = foldr1 uni . map (uncurry Both) $ Map.toList l where
+flatten (IsNil f) = bifun (const f) id $ nil
 
 instance (Sym r) => Sym (NF r) where
     sym range = NF $ Map.singleton (sym range) (sym range)
-instance  (Alt r, Uni r) => Alt (NF r) where alt = nfOp alt
-instance  (Cut r, Uni r) => Cut (NF r) where cut = nfOp cut
-instance  (Seq r, Uni r) => Seq (NF r) where seq = nfOp seq
-instance (Rep r, Uni r) => Rep (NF r) where rep = nfOp1 rep
-instance (Not r, Uni r) => Not (NF r) where not = nfOp1 not
+instance  (Alt r, Uni r, Bifun r, Nil r) => Alt (NF r) where
+    alt (IsNil f) (IsNil f') = bifun (const $ Cut f f') id $ nil
+    alt (IsNil f) r = bifun (Cut f) AltR r
+    alt l (IsNil f) = bifun (flip Cut f) AltL l
+    alt x y = nfOp alt x y
+instance  (Cut r, Uni r, Bifun r, Nil r) => Cut (NF r) where
+    cut (IsNil f) (IsNil f') = bifun (const $ AltB f f') id $ nil
+    cut (IsNil f) _ = bifun (const $ AltL f) id $ nil
+    cut _ (IsNil f) = bifun (const $ AltR f) id $ nil
+    cut x y = nfOp cut x y
+instance  (Seq r, Uni r, Bifun r, Nil r) => Seq (NF r) where
+    seq (IsNil f) _ = bifun (const $ AltL f) id $ nil
+--    seq x (IsNil f) = bifun (const $ AltR
+    seq x y = nfOp seq x y
+instance (Rep r, Uni r, Bifun r, Nil r, Eps r) => Rep (NF r) where
+    rep (IsNil f) = bifun (const $ Seq (Rep []) f) (const (Rep [])) eps
+    rep x = nfOp1 rep x
+instance (Not r, Uni r, Bifun r, Nil r) => Not (NF r) where not = nfOp1 not
 instance (Eps r) => Eps (NF r) where
     eps = NF $ Map.singleton eps eps
 instance (Nil r) => Nil (NF r) where
-    nil = NF $ Map.singleton nil nil
-instance (Functor (r f), Uni r) => Functor (NF r f) where
+    nil = IsNil ()
+instance (Functor (r f), Uni r, Bifun r, Nil r) => Functor (NF r f) where
     fmap fn = nfOp1 (fmap fn)
-instance (Bifun r, Uni r) => Bifun (NF r) where
+instance (Bifun r, Uni r, Nil r) => Bifun (NF r) where
     bifun ff sf = nfOp1 (bifun ff sf)
 
 instance (Uni r) => Uni (NF r) where
     uni (NF l) (NF r) = NF $ Map.union l r
-
+    uni (IsNil _) r = r
+    uni l (IsNil _) = l
+    
 forget' :: Phantom R f s -> R
 forget' = forget
 
@@ -203,8 +222,7 @@ instance (Functor (r f)) => Functor (D r f) where
 instance (Bifun r) => Bifun (D r) where
     bifun ff sf = dOp1 (bifun ff sf) (bifun ff sf) (bifun ff sf)
 
--- add NF here.
-d :: (Uni r) => Char -> D (NF r) f s -> r f s
+d :: (Uni r, Bifun r, Nil r) => Char -> D (NF r) f s -> r f s
 d char (D r _ _) = flattenForget $ r char
 
 newtype BackAll r f s = BackAll { unB :: D (NF (Both (BackAll r) r)) f s }
@@ -219,7 +237,7 @@ dd :: [Char] -> BackAll Either f s -> Either f s
 dd = dd'
 
 -- TODO: investigate whether we can get by without the (Uni r) constraint
-dd' :: (Uni r) => [Char] -> BackAll r f s -> r f s
+dd' :: (Uni r, Bifun r, Nil r) => [Char] -> BackAll r f s -> r f s
 dd' l re = two . flattenForget . now . unB
     $ foldl (\(BackAll (D r _ _)) c -> one . flattenForget $ r c) re l
 
@@ -230,12 +248,26 @@ result :: Either f s -> Either f s
 result = id
 
 main = do
+    print $ forget' . flattenForget $ x `uni` (bifun undefined undefined nil)
+    print $ forget' . flattenForget $ (bifun undefined undefined nil) `uni` x
+
+    print $ forget' . flattenForget $ x `seq` nil
+    print $ forget' . flattenForget $ nil `seq` x
+
+    print $ forget' . flattenForget $ x `cut` nil
+    print $ forget' . flattenForget $ nil `cut` x
+
+    print $ forget' . flattenForget $ nil `alt` x
+    print $ forget' . flattenForget $ x `alt` nil
+main'' = do
+    putStrLn "------"
     print $ forget' . flattenForget $ x `uni` x
     print $ forget' . flattenForget $ a `uni` (b `uni` x)
     print $ forget' . flattenForget $ a `uni` (b `uni` a)
     print $ forget' . flattenForget $ a `uni` (a `uni` b)
     print $ forget' . flattenForget $ a `uni` (a `uni` fmap undefined a)
     print $ forget' . flattenForget $ a
+main' = do
     let re = a
     print $ forget' . d 'a' $ a
     print $ dd "a" a
@@ -247,4 +279,4 @@ main = do
     print $ dd "ababab" (ab `seq` ab `seq` ab)
     print $ count $ dd' "ababab" (ab `seq` ab `seq` ab)
     let cf (Both c (Both f r)) = (count c, result f, forget' r)
-    print $ cf $ dd' (concat $ replicate 50 "abc") (rep $ a `seq` b `seq` x)
+    print $ cf $ dd' (concat $ replicate 50 "abc") (rep $ x)
