@@ -33,6 +33,8 @@ instance (Eq a) => Eq (Phantom a f s) where
         x == y = forget x == forget y
 instance (Ord a) => Ord (Phantom a f s) where
         compare = comparing forget
+instance (Show a) => Show (Phantom a f s) where
+    show = show . forget
 p = Phantom
 
 type R = T.Re' T.Range
@@ -59,6 +61,7 @@ instance Bifun (Phantom R) where bifun _ _ (Phantom x) = Phantom x
 -- All uni's should be sorted, und unified, eg like Set.
 -- muck around with contexts like for flattening in the paper?
 data NF r f s = IsNil f | NF (Map (Phantom R f s) (r f s))
+    deriving (Show)
 isNil (IsNil f) = True
 isNil _ = False
 -- This is doing
@@ -72,6 +75,8 @@ nfOp op l r = NF $ Map.singleton key val where
 nfOp1 op x = NF $ Map.singleton key val where
     (Both key val) = op (flatten x)
 
+nf :: NF r f s -> NF r f s
+nf = id
 
 flattenForget :: (Uni r, Bifun r, Nil r) => NF r f s -> r f s
 flattenForget = two . flatten
@@ -106,9 +111,11 @@ instance (Eps r) => Eps (NF r) where
 instance (Nil r) => Nil (NF r) where
     nil = IsNil ()
 instance (Functor (r f), Uni r, Bifun r, Nil r) => Functor (NF r f) where
-    fmap fn = nfOp1 (fmap fn)
+    fmap fn (IsNil f) = IsNil f
+    fmap fn x = nfOp1 (fmap fn) x
 instance (Bifun r, Uni r, Nil r) => Bifun (NF r) where
-    bifun ff sf = nfOp1 (bifun ff sf)
+    bifun ff _ (IsNil f) = IsNil $ ff f
+    bifun ff sf x = nfOp1 (bifun ff sf) x
 
 instance (Uni r) => Uni (NF r) where
     uni (NF l) (NF r) = NF $ Map.union l r
@@ -119,6 +126,7 @@ forget' :: Phantom R f s -> R
 forget' = forget
 
 newtype Count f s = Count Int
+    deriving (Show, Eq, Ord)
 plus (Count l) (Count r) = Count $ l + 1 + r
 
 instance Uni Count where uni = plus
@@ -247,18 +255,26 @@ dd' l re = two . flattenForget . now . unB
 result :: Either f s -> Either f s
 result = id
 
+nf' :: NF Count f s -> NF Count f s
+nf' = id
+
+nilX, nilY :: (Bifun r, Nil r) => r SymE Char
+nilX = bifun (const TooMany) id nil
+nilY = bifun (const Before) id nil
+
 main = do
-    print $ forget' . flattenForget $ x `uni` (bifun undefined undefined nil)
-    print $ forget' . flattenForget $ (bifun undefined undefined nil) `uni` x
+    print $ nf' $ x `uni` (flip uni nilX nilY)
+    print $ nf' $ nilX `uni` x
 
-    print $ forget' . flattenForget $ x `seq` nil
-    print $ forget' . flattenForget $ nil `seq` x
+    print $ nf' $ x `seq` nil
+    print $ nf' $ nilX `seq` x
 
-    print $ forget' . flattenForget $ x `cut` nil
-    print $ forget' . flattenForget $ nil `cut` x
+    print $ nf' $ x `cut` nilX
+    print $ nf' $ nilX `cut` x
 
-    print $ forget' . flattenForget $ nil `alt` x
-    print $ forget' . flattenForget $ x `alt` nil
+    print $ nf' $ nilX `alt` x
+    print $ nf' $ x `alt` nilX
+    main'
 main'' = do
     putStrLn "------"
     print $ forget' . flattenForget $ x `uni` x
@@ -279,4 +295,4 @@ main' = do
     print $ dd "ababab" (ab `seq` ab `seq` ab)
     print $ count $ dd' "ababab" (ab `seq` ab `seq` ab)
     let cf (Both c (Both f r)) = (count c, result f, forget' r)
-    print $ cf $ dd' (concat $ replicate 50 "abc") (rep $ x)
+    print $ cf $ dd' (concat $ replicate 150 "abc") (rep $ string "abc")
