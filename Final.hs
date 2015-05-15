@@ -113,8 +113,7 @@ nil_ :: (Bifun r, Nil r) => f -> r f s
 nil_ f = bifun (const f) undefined nil
 
 string ::
-    (Bifun r, Functor (r ()), Functor (r [Char]), Functor (r (AltI SymE (SeqI Char ()))),
-     Sym r, Seq r, Not r, Eps r) =>
+    (Bifun r, Sym r, Seq r, Eps r) =>
     String -> r () String
 string s = foldr h (eps_ () []) s where
     h char r = bifun fail succ $ seq (c char) r
