@@ -60,10 +60,9 @@ instance Bifun (Phantom R) where bifun _ _ (Phantom x) = Phantom x
 
 -- All uni's should be sorted, und unified, eg like Set.
 -- muck around with contexts like for flattening in the paper?
-data NF r f s = IsNil f | NF (Map (Phantom R f s) (r f s))
+-- -- Map should be non-empty, but have no Nils, and no-single eps.
+data NF r f s = IsEps f s | IsNil f | NF (Map (Phantom R f s) (r f s))
     deriving (Show)
-isNil (IsNil f) = True
-isNil _ = False
 -- This is doing
 -- a + a = a
 -- a + b = b + a
@@ -78,47 +77,59 @@ nfOp1 op x = NF $ Map.singleton key val where
 nf :: NF r f s -> NF r f s
 nf = id
 
-flattenForget :: (Uni r, Bifun r, Nil r) => NF r f s -> r f s
+flattenForget :: (Uni r, Bifun r, Nil r, Eps r) => NF r f s -> r f s
 flattenForget = two . flatten
 -- Only works on non-empty maps!
 -- TODO: filter out the nils, too.
-flatten :: (Uni r, Bifun r, Nil r) => NF r f s -> Both (Phantom R) r f s
+flatten :: (Uni r, Bifun r, Nil r, Eps r) => NF r f s -> Both (Phantom R) r f s
 flatten (NF l) = foldr1 uni . map (uncurry Both) $ Map.toList l where
 flatten (IsNil f) = bifun (const f) id $ nil
+flatten (IsEps f s) = bifun (const f) (const s) $ eps
 
 instance (Sym r) => Sym (NF r) where
     sym range = NF $ Map.singleton (sym range) (sym range)
-instance  (Alt r, Uni r, Bifun r, Nil r) => Alt (NF r) where
-    alt (IsNil f) (IsNil f') = bifun (const $ Cut f f') id $ nil
+instance  (Alt r, Uni r, Bifun r, Nil r, Eps r) => Alt (NF r) where
+    alt (IsNil f) (IsNil f') = nil_ (Cut f f')
     alt (IsNil f) r = bifun (Cut f) AltR r
     alt l (IsNil f) = bifun (flip Cut f) AltL l
     alt x y = nfOp alt x y
-instance  (Cut r, Uni r, Bifun r, Nil r) => Cut (NF r) where
-    cut (IsNil f) (IsNil f') = bifun (const $ AltB f f') id $ nil
-    cut (IsNil f) _ = bifun (const $ AltL f) id $ nil
-    cut _ (IsNil f) = bifun (const $ AltR f) id $ nil
+instance  (Cut r, Uni r, Bifun r, Nil r, Eps r) => Cut (NF r) where
+    cut (IsNil f) (IsNil f') = nil_ (AltB f f')
+    cut (IsNil f) _ = nil_ (AltL f)
+    cut _ (IsNil f) = nil_ (AltR f)
     cut x y = nfOp cut x y
-instance  (Seq r, Uni r, Bifun r, Nil r) => Seq (NF r) where
-    seq (IsNil f) _ = bifun (const $ AltL f) id $ nil
+instance  (Seq r, Uni r, Bifun r, Nil r, Eps r) => Seq (NF r) where
+    seq (IsNil f) _ = nil_ (AltL f)
+-- turns success into failure, too..  But gives an interesting error message..
+-- shoudn't happen, in any case..
 --    seq x (IsNil f) = bifun (const $ AltR
+    seq (IsEps f s) (IsEps f' s') = eps_ (AltR $ Seq s f') (Seq s s')
+    seq (IsEps f s) r = bifun (AltR . Seq s)  (Seq s) r
+    seq l (IsEps f s) = bifun AltL (`Seq` s) l
     seq x y = nfOp seq x y
 instance (Rep r, Uni r, Bifun r, Nil r, Eps r) => Rep (NF r) where
     rep (IsNil f) = bifun (const $ Seq (Rep []) f) (const (Rep [])) eps
     rep x = nfOp1 rep x
-instance (Not r, Uni r, Bifun r, Nil r) => Not (NF r) where not = nfOp1 not
-instance (Eps r) => Eps (NF r) where
-    eps = NF $ Map.singleton eps eps
+instance (Not r, Uni r, Bifun r, Nil r, Eps r) => Not (NF r) where not = nfOp1 not
+instance (Eps r, Bifun r) => Eps (NF r) where
+    eps = IsEps () ()
+    -- eps = NF $ Map.singleton eps eps
 instance (Nil r) => Nil (NF r) where
     nil = IsNil ()
-instance (Functor (r f), Uni r, Bifun r, Nil r) => Functor (NF r f) where
+instance (Functor (r f), Uni r, Bifun r, Nil r, Eps r) => Functor (NF r f) where
     fmap fn (IsNil f) = IsNil f
+    fmap fn (IsEps f s) = IsEps f (fn s)
     fmap fn x = nfOp1 (fmap fn) x
-instance (Bifun r, Uni r, Nil r) => Bifun (NF r) where
+instance (Bifun r, Uni r, Nil r, Eps r) => Bifun (NF r) where
     bifun ff _ (IsNil f) = IsNil $ ff f
+    bifun ff sf (IsEps f s) = IsEps (ff f) (sf s)
     bifun ff sf x = nfOp1 (bifun ff sf) x
 
-instance (Uni r) => Uni (NF r) where
+instance (Uni r, Eps r, Bifun r) => Uni (NF r) where
     uni (NF l) (NF r) = NF $ Map.union l r
+    uni (NF l) (IsEps f s) = NF $ Map.insert (eps_ f s) (eps_ f s) l
+    uni (IsEps f s) (NF l) = NF $ Map.insert (eps_ f s) (eps_ f s) l
+    uni l@(IsEps _ _) (IsEps _ _) = l
     uni (IsNil _) r = r
     uni l (IsNil _) = l
     
@@ -189,8 +200,8 @@ instance (Uni r) => Uni (D r) where uni = dOp2 uni uni uni
     
 instance (Sym r, Bifun r, Nil r, Eps r) => Sym (D r) where
     sym range = D (\char -> case rangeMatch range char of
-        Nothing -> bifun (const $ Wrong range char) id $ nil
-        Just _ -> bifun (const $ TooMany) (const $ char) $ eps)
+        Nothing -> nil_ (Wrong range char)
+        Just _ -> eps_ TooMany char)
         (sym range)
         (sym range)
 instance (Alt r) => Alt (D r) where alt = dOp2 alt alt alt
@@ -230,7 +241,7 @@ instance (Functor (r f)) => Functor (D r f) where
 instance (Bifun r) => Bifun (D r) where
     bifun ff sf = dOp1 (bifun ff sf) (bifun ff sf) (bifun ff sf)
 
-d :: (Uni r, Bifun r, Nil r) => Char -> D (NF r) f s -> r f s
+d :: (Uni r, Bifun r, Nil r, Eps r) => Char -> D (NF r) f s -> r f s
 d char (D r _ _) = flattenForget $ r char
 
 newtype BackAll r f s = BackAll { unB :: D (NF (Both (BackAll r) r)) f s }
@@ -245,7 +256,7 @@ dd :: [Char] -> BackAll Either f s -> Either f s
 dd = dd'
 
 -- TODO: investigate whether we can get by without the (Uni r) constraint
-dd' :: (Uni r, Bifun r, Nil r) => [Char] -> BackAll r f s -> r f s
+dd' :: (Uni r, Bifun r, Nil r, Eps r) => [Char] -> BackAll r f s -> r f s
 dd' l re = two . flattenForget . now . unB
     $ foldl (\(BackAll (D r _ _)) c -> one . flattenForget $ r c) re l
 
@@ -259,14 +270,16 @@ nf' :: NF Count f s -> NF Count f s
 nf' = id
 
 nilX, nilY :: (Bifun r, Nil r) => r SymE Char
-nilX = bifun (const TooMany) id nil
-nilY = bifun (const Before) id nil
+nilX = nil_ TooMany
+nilY = nil_ Before
+
+print3 (a,b,c) = print a >> print b >> print c >> putStrLn ""
 
 main = do
     print $ nf' $ x `uni` (flip uni nilX nilY)
     print $ nf' $ nilX `uni` x
 
-    print $ nf' $ x `seq` nil
+    print $ nf' $ x `seq` nilX
     print $ nf' $ nilX `seq` x
 
     print $ nf' $ x `cut` nilX
@@ -274,6 +287,10 @@ main = do
 
     print $ nf' $ nilX `alt` x
     print $ nf' $ x `alt` nilX
+
+    print $ nf' $ eps `seq` x
+    print $ nf' $ x `seq` eps
+    putStrLn "+++++"
     main'
 main'' = do
     putStrLn "------"
@@ -295,4 +312,12 @@ main' = do
     print $ dd "ababab" (ab `seq` ab `seq` ab)
     print $ count $ dd' "ababab" (ab `seq` ab `seq` ab)
     let cf (Both c (Both f r)) = (count c, result f, forget' r)
-    print $ cf $ dd' (concat $ replicate 150 "abc") (rep $ string "abc")
+    print $ cf $ dd' (concat $ replicate 50 "abc") (rep $ string "abc")
+    let flapping = cut (i `seq` string "ping") (not $ i `seq` string "flapping") `seq` i
+    putStrLn "Flapping!"
+    putStrLn ""
+    print3 $ cf $ dd' "ee flapping eue" flapping
+    print3 $ cf $ dd' "ee flapping eue ping oe" flapping
+    print3 $ cf $ dd' "ee lapping eue pin" flapping
+
+i = rep (sym Nothing)
