@@ -312,5 +312,16 @@ main' = do
     print3 $ cf $ dd' "ee flapping eue" flapping
     print3 $ cf $ dd' "ee flapping eue ping oe" flapping
     print3 $ cf $ dd' "ee lapping eue pin" flapping
+    -- Quadratic!
+    -- print3 $ cf $ dd' (concat $ replicate 10000 "a") (rep $ sym Nothing)
+    -- print3 $ cf $ dd' (concat $ replicate 1250 "a") (rep $ sym Nothing)
+    putStrLn "======= Experiment ========"
+    let n = 1000
+        i = 100
+    print $ forget' . flattenForget $
+        dd' (concat $ replicate (n*i) "a") (not nil `seq` not nil)
+            -- (rep $ sym Nothing)
+    -- print3 $ cf $ dd' (concat $ replicate 2500 "a") (rep $ sym Nothing)
+
 
 i = rep (sym Nothing)
