@@ -7,6 +7,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 module Final where
+import Data.Bifunctor
 import Control.Applicative
 import Control.Monad
 import Prelude hiding (seq, not)

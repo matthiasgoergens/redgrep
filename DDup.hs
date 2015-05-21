@@ -22,8 +22,6 @@ import Data.Map (Map)
 import Util
 import Data.List
 import Data.String
-import Data.Biapplicative
-import Data.Bifunctor
 import Data.Function (on)
 import Data.Ord
 import Control.Arrow ((***),(&&&))
