@@ -83,8 +83,8 @@ flattenForget = two . flatten
 -- TODO: filter out the nils, too.
 flatten :: (Uni r, Bifun r, Nil r, Eps r) => NF r f s -> Both (Phantom R) r f s
 flatten (NF l) = foldr1 uni . map (uncurry Both) $ Map.toList l where
-flatten (IsNil f) = bifun (const f) id $ nil
-flatten (IsEps f s) = bifun (const f) (const s) $ eps
+flatten (IsNil f) = nil_ f
+flatten (IsEps f s) = eps_ f s
 
 instance (Sym r) => Sym (NF r) where
     sym range = NF $ Map.singleton (sym range) (sym range)
@@ -108,7 +108,8 @@ instance  (Seq r, Uni r, Bifun r, Nil r, Eps r) => Seq (NF r) where
     seq l (IsEps f s) = bifun AltL (`Seq` s) l
     seq x y = nfOp seq x y
 instance (Rep r, Uni r, Bifun r, Nil r, Eps r) => Rep (NF r) where
-    rep (IsNil f) = bifun (const $ Seq (Rep []) f) (const (Rep [])) eps
+    rep (IsNil f) = eps_ (Seq (Rep []) f) (Rep [])
+    rep (IsEps f _) = eps_ (Seq (Rep []) f) (Rep [])
     rep x = nfOp1 rep x
 instance (Not r, Uni r, Bifun r, Nil r, Eps r) => Not (NF r) where not = nfOp1 not
 instance (Eps r, Bifun r) => Eps (NF r) where
