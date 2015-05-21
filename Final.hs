@@ -16,8 +16,6 @@ import qualified Types as T
 import Util
 import Data.List
 import Data.String
-import Data.Biapplicative
-import Data.Bifunctor
 import Control.Arrow ((***), (&&&))
 
 {-
@@ -66,8 +64,6 @@ class Eps r where
     eps :: r () ()
 class Nil r where
     nil :: r () s
-class Bifun r where
-    bifun :: (f -> f') -> (s -> s') -> r f s -> r f' s'
 
 data Both x y f s = Both { one :: (x f s), two :: (y f s) }
 unBoth = (one &&& two)
@@ -97,27 +93,23 @@ instance (Nil l, Nil r) => Nil (Both l r) where
 instance (Functor (l f), Functor (r f)) => Functor (Both l r f) where
     fmap fn (Both l r) = Both (fmap fn l) (fmap fn r)
 
-instance (Bifun l, Bifun r) =>  Bifun (Both l r) where
-    bifun h g (Both l r) = Both (bifun h g l) (bifun h g r)
-
-
-instance Bifun (Backtrack y x) where
-    bifun h g = not . fmap h . not . fmap g
+instance (Bifunctor l, Bifunctor r) =>  Bifunctor (Both l r) where
+    bimap h g (Both l r) = Both (bimap h g l) (bimap h g r)
 
 instance IsString (Backtrack y x () String) where
     fromString = string
 
-eps_ :: (Bifun r, Eps r) => f -> s -> r f s
-eps_ f s = bifun (const f) (const s) eps
+eps_ :: (Bifunctor r, Eps r) => f -> s -> r f s
+eps_ f s = bimap (const f) (const s) eps
 
-nil_ :: (Bifun r, Nil r) => f -> r f s
-nil_ f = bifun (const f) undefined nil
+nil_ :: (Bifunctor r, Nil r) => f -> r f s
+nil_ f = bimap (const f) undefined nil
 
 string ::
-    (Bifun r, Sym r, Seq r, Eps r) =>
+    (Bifunctor r, Sym r, Seq r, Eps r) =>
     String -> r () String
 string s = foldr h (eps_ () []) s where
-    h char r = bifun fail succ $ seq (c char) r
+    h char r = bimap fail succ $ seq (c char) r
     succ (Seq c r) = c : r
     -- TODO: figure out good error reporting
     fail (AltL l) = ()
@@ -218,15 +210,15 @@ instance Bifunctor (Backtrack y x) where
 instance Monoid f => Applicative (Backtrack y x f) where
     pure = eps_ mempty
     (<*>) = ap'
-ap' fn res = bifun fail (\(Seq f a) -> f a) $ fn `seq` res where
+ap' fn res = bimap fail (\(Seq f a) -> f a) $ fn `seq` res where
         fail (AltL f) = f
         fail (AltR (Seq _ f)) = f
         -- shouldn't happen..
 
 -- Nothing Backtrack specific.
 instance (Monoid f, Monoid s) => Monoid (Backtrack y x f s) where
-    mempty = bifun (const mempty) undefined nil
-    mappend a b = bifun fail succ $ a `alt` b where
+    mempty = bimap (const mempty) undefined nil
+    mappend a b = bimap fail succ $ a `alt` b where
         fail (Cut a b) = mappend a b
         succ (AltL a) = a
         succ (AltR b) = b
@@ -259,7 +251,7 @@ instance Alt (Backtrack y x) where
           (scont . AltL)
           str
 instance Rep (Backtrack y x) where
-    rep x = bifun ff sf $ alt (eps_ () (Rep [])) (seq x $ rep x) where
+    rep x = bimap ff sf $ alt (eps_ () (Rep [])) (seq x $ rep x) where
         sf (AltL r) = r
         sf (AltR (Seq a (Rep b))) = Rep (a:b)
         ff (Cut _ r) = case r of
