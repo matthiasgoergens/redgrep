@@ -94,7 +94,7 @@ instance  (Alt r, Uni r, Bifun r, Nil r, Eps r) => Alt (NF r) where
     alt l (IsNil f) = bifun (flip Cut f) AltL l
     alt x y = nfOp alt x y
 instance  (Cut r, Uni r, Bifun r, Nil r, Eps r) => Cut (NF r) where
-    cut (IsNil f) (IsNil f') = nil_ (AltB f f')
+    -- Left biased.
     cut (IsNil f) _ = nil_ (AltL f)
     cut _ (IsNil f) = nil_ (AltR f)
     cut x y = nfOp cut x y
@@ -168,12 +168,12 @@ instance Uni Either where
 instance Alt Either where
     alt (Left l) (Left r) = Left (Cut l r)
     alt (Left _) (Right r) = Right (AltR r)
-    alt (Right l) (Left _) = Right (AltL l)
-    alt (Right l) (Right r) = Right (AltB l r)
+    -- left biased.
+    alt (Right l) _ = Right (AltL l)
 instance Cut Either where
-    cut (Left l) (Left r) = Left (AltB l r)
-    cut (Left l) (Right _) = Left (AltL l)
-    cut (Right _) (Left r) = Left (AltR r)
+    -- left biased.
+    cut (Left l) _ = Left (AltL l)
+    cut _ (Left r) = Left (AltR r)
     cut (Right l) (Right r) = Right (Cut l r)
 instance Seq Either where
     seq (Left l) (Left r) = Left (AltL l)
@@ -227,8 +227,6 @@ instance (Rep r, Uni r, Seq r, Bifun r) => Rep (D r) where
         -- TODO: How do we get more than one element in the list?
         where fc (AltL f) = Seq (Rep []) f
               fc (AltR (Seq x (Seq (Rep xs) f))) = Seq (Rep $ x:xs) f
-              -- Shouldn't really happen.
-              fc (AltB _ (Seq x (Seq (Rep xs) f))) = Seq (Rep $ x:xs) f
               -- TODO: How do we get more than two elements in the list?
               sc (Seq l (Rep r)) = Rep $ l : r
 instance (Not r) => Not (D r) where

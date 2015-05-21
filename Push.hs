@@ -65,7 +65,6 @@ instance Seq Push where
                 fail (Cut a b) = a 
                 succ (AltL a) = a
                 succ (AltR b) = b
-                succ (AltB a b) = a
             in \char -> bifun fail succ $
                         (next a char `seq` b) `alt`
                         next b' char
@@ -74,8 +73,8 @@ instance Alt Push where
     alt a b = Push
         { now = case (now a, now b) of
             (Left a, Left b) -> Left $ Cut a b
-            (Right a, Right b) -> Right $ AltB a b
-            (Right a, Left _) -> Right $ AltL a
+            -- Left biased.
+            (Right a, _) -> Right $ AltL a
             (Left _, Right b) -> Right (AltR b)
         , next = \char -> next a char `alt` next b char
         }

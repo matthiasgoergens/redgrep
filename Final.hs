@@ -32,7 +32,7 @@ Progress here:
 -- Before needs to be last, to make merging with max work.
 data SymE = TooMany | Wrong Range Char | Before
     deriving (Eq, Ord, Show)
-data AltI a b = AltL a | AltR b | AltB a b
+data AltI a b = AltL a | AltR b
     deriving (Eq, Ord, Show)
 data CutI a b = Cut a b
     deriving (Eq, Ord, Show)
@@ -121,7 +121,6 @@ string s = foldr h (eps_ () []) s where
     -- TODO: figure out good error reporting
     fail (AltL l) = ()
     fail (AltR r) = ()
-    fail (AltB l r) = ()
 
 newtype Backtrack y x f s = Backtrack ((f -> String -> Either y x) -> (s -> String -> Either y x) -> String -> Either y x)
 
@@ -222,7 +221,6 @@ ap' fn res = bifun fail (\(Seq f a) -> f a) $ fn `seq` res where
         fail (AltL f) = f
         fail (AltR (Seq _ f)) = f
         -- shouldn't happen..
-        fail (AltB fa (Seq _ fb)) = fa `mappend` fb
 
 -- Nothing Backtrack specific.
 instance (Monoid f, Monoid s) => Monoid (Backtrack y x f s) where
@@ -231,7 +229,6 @@ instance (Monoid f, Monoid s) => Monoid (Backtrack y x f s) where
         fail (Cut a b) = mappend a b
         succ (AltL a) = a
         succ (AltR b) = b
-        succ (AltB a b) = mappend a b
 
 instance Sym (Backtrack y x) where
     sym range = Backtrack $ \f s str ->
@@ -264,11 +261,9 @@ instance Rep (Backtrack y x) where
     rep x = bifun ff sf $ alt (eps_ () (Rep [])) (seq x $ rep x) where
         sf (AltL r) = r
         sf (AltR (Seq a (Rep b))) = Rep (a:b)
-        sf (AltB r _) = r
         ff (Cut _ r) = case r of
             AltL f -> Seq (Rep []) f
             AltR (Seq x (Seq (Rep xs) f)) -> Seq (Rep $ x:xs) f
-            AltB f _ -> Seq (Rep []) f
 -- CutI f0
 --      (AltI f
 --            (SeqI s (SeqI (RepI s) f)))
