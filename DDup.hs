@@ -68,14 +68,14 @@ instance Rep (Phantom Rf) where rep = p . Rep' . forget
 instance Not (Phantom Rf) where not = p . Not' . forget
 instance Eps (Phantom Rf) where eps = p Eps'
 instance Nil (Phantom Rf) where nil = p Nil'
-instance Functor (Phantom Rf f) where fmap _ (Phantom x) = Phantom (FMap x)
-instance Bifunctor (Phantom Rf) where bimap _ _ (Phantom x) = Phantom (FMap x)
+instance Functor (Phantom Rf f) where fmap _ (Phantom x) = Phantom (Bimap' x)
+instance Bifunctor (Phantom Rf) where bimap _ _ (Phantom x) = Phantom (Bimap' x)
 
 data Re'f f = Sym' f | Alt' (Re'f f) (Re'f f) | Cut' (Re'f f) (Re'f f)
            | Seq' (Re'f f) (Re'f f) | Rep' (Re'f f) | Not' (Re'f f)
            | Eps' | Nil'
            | Uni' (Re'f f) (Re'f f) -- (Set.Set (Re'f f))
-           | FMap (Re'f f)
+           | Bimap' (Re'f f)
     deriving (Eq, Ord, Show)
 
 
@@ -94,43 +94,56 @@ data NF r f s
 -- Try floating fmaps only first.
 data NFMap r f s
     = forall f' s' . NFMap (f' -> f) (s' -> s) (r f' s')
+    | ID (r f s)
 
 un :: Bifunctor r => NFMap r f s -> r f s
 un (NFMap f s x) = bimap f s x
+un (ID r) = r
 
 nfmap :: r f s -> NFMap r f s
-nfmap = NFMap id id
+nfmap = ID
+
+nfmap' (ID x) = NFMap id id x
+nfmap' x = x
 
 instance Sym r => Sym (NFMap r) where
-    sym = NFMap id id . sym
+    sym = ID . sym
 -- TODO: How do you abstract these?
 instance (Bifunctor r, Alt r) => Alt (NFMap r) where
-    alt (NFMap fx sx x) (NFMap fy sy y) =
+    alt (un -> x) (un -> y) = ID $ alt x y
+    alt (ID x) (ID y) = ID $ alt x y
+    -- got a choice, could also choose ID.
+    alt (nfmap' -> NFMap fx sx x) (nfmap' -> NFMap fy sy y) =
         NFMap (bimap fx fy) (bimap sx sy) $ alt x y
 instance (Bifunctor r, Uni r) => Uni (NFMap r) where
-    uni (un -> x) (un -> y) = NFMap id id $ x `uni` y
+    uni (un -> x) (un -> y) = ID $ x `uni` y
 instance (Bifunctor r, Cut r) => Cut (NFMap r) where
-    cut (NFMap fx sx x) (NFMap fy sy y) =
+    cut (un -> x) (un -> y) = ID $ cut x y
+    cut (ID x) (ID y) = ID $ cut x y
+    cut (nfmap' -> NFMap fx sx x) (nfmap' -> NFMap fy sy y) =
         NFMap (bimap fx fy) (bimap sx sy) $ cut x y
 instance (Bifunctor r, Seq r) => Seq (NFMap r) where
-    seq (NFMap fx sx x) (NFMap fy sy y) =
+    seq (un -> x) (un -> y) = ID $ seq x y
+    seq (ID x) (ID y) = ID $ seq x y
+    seq (nfmap' -> NFMap fx sx x) (nfmap' -> NFMap fy sy y) =
         NFMap (bimap fx $ bimap sx fy) (bimap sx sy) $ seq x y
 instance (Bifunctor r, Rep r) => Rep (NFMap r) where
+    rep (un -> x) = ID $ rep x
+    rep (ID x) = ID $ rep x
     rep (NFMap fx sx x) = NFMap (bimap (fmap sx) fx) (fmap sx) $ rep x
 instance (Bifunctor r, Not r) => Not (NFMap r) where
+    not (un -> x) = ID $ not x
+    not (ID x) = ID $ not x
     not (NFMap fx sx x) = NFMap sx fx $ not x
 instance (Eps r) => Eps (NFMap r) where
-    eps = NFMap id id eps
+    eps = ID eps
 instance (Nil r) => Nil (NFMap r) where
-    nil = NFMap id id nil
+    nil = ID nil
 instance Functor (NFMap r f) where
-    fmap sf (NFMap f s x) = NFMap f (sf . s) x
+    fmap = bimap id
 instance Bifunctor (NFMap r) where
-    bimap ff sf (NFMap f s x) = NFMap (ff . f) (sf . s) x
-{-
-instance Functor (Phantom R f) where fmap _ (Phantom x) = Phantom x
-instance Bifunctor (Phantom R) where bimap _ _ (Phantom x) = Phantom x
--}
+    -- whole point..
+    bimap ff sf (nfmap' -> NFMap f s x) = NFMap (ff . f) (sf . s) x
 
 nfOp op l r = NF $ Map.singleton key val where
     (Both key val) = op (flatten l) (flatten r)
@@ -187,10 +200,13 @@ instance (Bifunctor r, Uni r, Nil r, Eps r) => Bifunctor (NF r) where
     bimap ff sf (IsEps f s) = IsEps (ff f) (sf s)
     bimap ff sf x = nfOp1 (bimap ff sf) x
 
+-- The whole point of this NF exercise:
 instance (Uni r, Eps r, Bifunctor r) => Uni (NF r) where
     uni (NF l) (NF r) = NF $ Map.union l r
-    uni (NF l) (IsEps f s) = NF $ Map.insert (eps_ f s) (eps_ f s) l
-    uni (IsEps f s) (NF l) = NF $ Map.insert (eps_ f s) (eps_ f s) l
+    uni (NF l) (IsEps f s) = NF $ Map.insert
+        (eps_ undefined undefined) (eps_ f s) l
+    uni (IsEps f s) (NF l) = NF $ Map.insert
+        (eps_ undefined undefined) (eps_ f s) l
     uni l@(IsEps _ _) (IsEps _ _) = l
     uni (IsNil _) r = r
     uni l (IsNil _) = l
@@ -386,12 +402,20 @@ main' = do
     -- print3 $ cf $ dd' (concat $ replicate 10000 "a") (rep $ sym Nothing)
     -- print3 $ cf $ dd' (concat $ replicate 1250 "a") (rep $ sym Nothing)
 main = do
-    putStrLn "======= Experiment ========"
-    let n = 100
-        i = 5
+    mapM_ fain [10000]
+    let i = 20
+    let rex = dd' (concat $ replicate i "a") $
+                    bimap (const ()) (const ())
+                    $ (not nil `seq` not nil) 
+    -- print $ count rex
+    -- print $ nf' rex
+    return ()
+
+fain i = do
     -- quadratic again..
-    print $ forgetF $
-        dd' (concat $ replicate (n*i) "abc") $
+    print $ (count *** forgetF) . unBoth $
+    -- print $ count $
+        dd' (concat $ replicate i "a") $
             bimap (const ()) (const ())
             $ (not nil `seq` not nil) 
             -- (rep $ sym Nothing)
