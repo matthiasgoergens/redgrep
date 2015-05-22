@@ -54,7 +54,7 @@ instance Rep (Phantom R) where rep = p . T.Rep' . forget
 instance Not (Phantom R) where not = p . T.Not' . forget
 instance Eps (Phantom R) where eps = p T.Eps'
 instance Nil (Phantom R) where nil = p T.Nil'
-instance Functor (Phantom R f) where fmap f (Phantom x) = Phantom x
+instance Functor (Phantom R f) where fmap _ (Phantom x) = Phantom x
 instance Bifunctor (Phantom R) where bimap _ _ (Phantom x) = Phantom x
 
 -- All uni's should be sorted, und unified, eg like Set.
