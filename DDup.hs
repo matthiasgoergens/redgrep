@@ -9,6 +9,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ViewPatterns #-}
 import Final hiding (main)
 import Data.Bifunctor
 import Control.Applicative hiding (empty)
@@ -81,12 +82,55 @@ data Re'f f = Sym' f | Alt' (Re'f f) (Re'f f) | Cut' (Re'f f) (Re'f f)
 -- All uni's should be sorted, und unified, eg like Set.
 -- muck around with contexts like for flattening in the paper?
 -- -- Map should be non-empty, but have no Nils, and no-single eps.
-data NF r f s = IsEps f s | IsNil f | NF (Map (Phantom R f s) (r f s))
+data NF r f s
+    -- = IsBimap ff sf (NF r f s)
+    = IsEps f s | IsNil f | NF (Map (Phantom R f s) (r f s))
     deriving (Show)
 -- This is doing
 -- a + a = a
 -- a + b = b + a
 -- (a + b) + c = a + (b + c)
+
+-- Try floating fmaps only first.
+data NFMap r f s
+    = forall f' s' . NFMap (f' -> f) (s' -> s) (r f' s')
+
+un :: Bifunctor r => NFMap r f s -> r f s
+un (NFMap f s x) = bimap f s x
+
+nfmap :: r f s -> NFMap r f s
+nfmap = NFMap id id
+
+instance Sym r => Sym (NFMap r) where
+    sym = NFMap id id . sym
+-- TODO: How do you abstract these?
+instance (Bifunctor r, Alt r) => Alt (NFMap r) where
+    alt (NFMap fx sx x) (NFMap fy sy y) =
+        NFMap (bimap fx fy) (bimap sx sy) $ alt x y
+instance (Bifunctor r, Uni r) => Uni (NFMap r) where
+    uni (un -> x) (un -> y) = NFMap id id $ x `uni` y
+instance (Bifunctor r, Cut r) => Cut (NFMap r) where
+    cut (NFMap fx sx x) (NFMap fy sy y) =
+        NFMap (bimap fx fy) (bimap sx sy) $ cut x y
+instance (Bifunctor r, Seq r) => Seq (NFMap r) where
+    seq (NFMap fx sx x) (NFMap fy sy y) =
+        NFMap (bimap fx $ bimap sx fy) (bimap sx sy) $ seq x y
+instance (Bifunctor r, Rep r) => Rep (NFMap r) where
+    rep (NFMap fx sx x) = NFMap (bimap (fmap sx) fx) (fmap sx) $ rep x
+instance (Bifunctor r, Not r) => Not (NFMap r) where
+    not (NFMap fx sx x) = NFMap sx fx $ not x
+instance (Eps r) => Eps (NFMap r) where
+    eps = NFMap id id eps
+instance (Nil r) => Nil (NFMap r) where
+    nil = NFMap id id nil
+instance Functor (NFMap r f) where
+    fmap sf (NFMap f s x) = NFMap f (sf . s) x
+instance Bifunctor (NFMap r) where
+    bimap ff sf (NFMap f s x) = NFMap (ff . f) (sf . s) x
+{-
+instance Functor (Phantom R f) where fmap _ (Phantom x) = Phantom x
+instance Bifunctor (Phantom R) where bimap _ _ (Phantom x) = Phantom x
+-}
 
 nfOp op l r = NF $ Map.singleton key val where
     (Both key val) = op (flatten l) (flatten r)
@@ -110,7 +154,7 @@ instance (Sym r) => Sym (NF r) where
 instance  (Alt r, Uni r, Bifunctor r, Nil r, Eps r) => Alt (NF r) where
     alt (IsNil f) (IsNil f') = nil_ (Cut f f')
     alt (IsNil f) r = bimap (Cut f) AltR r
-    alt l (IsNil f) = bimap (flip Cut f) AltL l
+    alt l (IsNil f) = bimap (`Cut` f) AltL l
     alt x y = nfOp alt x y
 instance  (Cut r, Uni r, Bifunctor r, Nil r, Eps r) => Cut (NF r) where
     -- Left biased.
@@ -136,10 +180,8 @@ instance (Eps r, Bifunctor r) => Eps (NF r) where
     -- eps = NF $ Map.singleton eps eps
 instance (Nil r) => Nil (NF r) where
     nil = IsNil ()
-instance (Functor (r f), Uni r, Bifunctor r, Nil r, Eps r) => Functor (NF r f) where
-    fmap fn (IsNil f) = IsNil f
-    fmap fn (IsEps f s) = IsEps f (fn s)
-    fmap fn x = nfOp1 (fmap fn) x
+instance (Uni r, Bifunctor r, Nil r, Eps r) => Functor (NF r f) where
+    fmap fn = bimap id fn
 instance (Bifunctor r, Uni r, Nil r, Eps r) => Bifunctor (NF r) where
     bimap ff _ (IsNil f) = IsNil $ ff f
     bimap ff sf (IsEps f s) = IsEps (ff f) (sf s)
@@ -155,6 +197,9 @@ instance (Uni r, Eps r, Bifunctor r) => Uni (NF r) where
     
 forget' :: Phantom R f s -> R
 forget' = forget
+
+forgetF :: Phantom Rf f s -> Rf
+forgetF = forget
 
 newtype Count f s = Count Int
     deriving (Show, Eq, Ord)
@@ -259,8 +304,11 @@ instance (Bifunctor r) => Bifunctor (D r) where
 d :: (Uni r, Bifunctor r, Nil r, Eps r) => Char -> D (NF r) f s -> r f s
 d char (D r _ _) = flattenForget $ r char
 
-newtype BackAll r f s = BackAll { unB :: D (NF (Both (BackAll r) r)) f s }
+newtype BackAll r f s = BackAll { unB :: D (NF (NFMap (Both (BackAll r) r))) f s }
     deriving (Uni, Sym, Alt, Seq, Cut, Rep, Not, Nil, Eps, Bifunctor, Functor)
+
+unBackAll :: (Bifunctor r, Nil r, Eps r, Uni r) => BackAll r f s -> r f s
+unBackAll = two . un . flattenForget . now . unB
 
 instance (Uni r, Nil r, Sym r, Seq r, Bifunctor r, Eps r) => IsString (BackAll r () [Char]) where
     fromString s = string s
@@ -268,10 +316,12 @@ instance (Uni r, Nil r, Sym r, Seq r, Bifunctor r, Eps r) => IsString (BackAll r
 dd :: [Char] -> BackAll Either f s -> Either f s
 dd = dd'
 
+d1 :: (Bifunctor r, Nil r, Eps r, Uni r) => Char -> BackAll r f s -> BackAll r f s
+d1 c = one . un . flattenForget . ($c) . unD . unB
+
 -- TODO: investigate whether we can get by without the (Uni r) constraint
 dd' :: (Uni r, Bifunctor r, Nil r, Eps r) => [Char] -> BackAll r f s -> r f s
-dd' l re = two . flattenForget . now . unB
-    $ foldl (\(BackAll (D r _ _)) c -> one . flattenForget $ r c) re l
+dd' l re = unBackAll $ foldl (flip d1) re l
 
 -- aaa :: Either SymE Char
 -- aaa = v . d 'b' . d 'a' $ a
@@ -288,7 +338,7 @@ nilY = nil_ Before
 
 print3 (a,b,c) = print a >> print b >> print c >> putStrLn ""
 
-main = do
+mainOld = do
     print $ nf' $ x `uni` (flip uni nilX nilY)
     print $ nf' $ nilX `uni` x
 
@@ -332,14 +382,18 @@ main' = do
     print3 $ cf $ dd' "ee flapping eue" flapping
     print3 $ cf $ dd' "ee flapping eue ping oe" flapping
     print3 $ cf $ dd' "ee lapping eue pin" flapping
-    -- Quadratic!
+    -- Quadratic! Rep takes quadratic time!
     -- print3 $ cf $ dd' (concat $ replicate 10000 "a") (rep $ sym Nothing)
     -- print3 $ cf $ dd' (concat $ replicate 1250 "a") (rep $ sym Nothing)
+main = do
     putStrLn "======= Experiment ========"
-    let n = 1000
-        i = 100
-    print $ forget' . flattenForget $
-        dd' (concat $ replicate (n*i) "a") (not nil `seq` not nil)
+    let n = 100
+        i = 5
+    -- quadratic again..
+    print $ forgetF $
+        dd' (concat $ replicate (n*i) "abc") $
+            bimap (const ()) (const ())
+            $ (not nil `seq` not nil) 
             -- (rep $ sym Nothing)
     -- print3 $ cf $ dd' (concat $ replicate 2500 "a") (rep $ sym Nothing)
 

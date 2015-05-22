@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveFunctor #-}
 module Final where
 import Data.Bifunctor
 import Control.Applicative
@@ -32,13 +33,20 @@ Progress here:
 data SymE = TooMany | Wrong Range Char | Before
     deriving (Eq, Ord, Show)
 data AltI a b = AltL a | AltR b
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Functor)
+instance Bifunctor AltI where
+    bimap f _ (AltL a) = AltL $ f a
+    bimap _ g (AltR b) = AltR $ g b
 data CutI a b = Cut a b
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Functor)
+instance Bifunctor CutI where
+    bimap f g (Cut a b) = Cut (f a) (g b)
 data SeqI a b = Seq a b
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Functor)
+instance Bifunctor SeqI where
+    bimap f g (Seq a b) = Seq (f a) (g b)
 data RepI a = Rep [a]
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Functor)
 
 type Range = Maybe [Char]
 
