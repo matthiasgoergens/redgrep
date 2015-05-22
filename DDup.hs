@@ -86,7 +86,6 @@ data NF r f s = IsEps f s | IsNil f | NF (Map (Phantom R f s) (r f s))
 -- This is doing
 -- a + a = a
 -- a + b = b + a
--- but missing
 -- (a + b) + c = a + (b + c)
 
 nfOp op l r = NF $ Map.singleton key val where
