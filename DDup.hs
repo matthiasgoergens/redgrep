@@ -57,6 +57,27 @@ instance Nil (Phantom R) where nil = p T.Nil'
 instance Functor (Phantom R f) where fmap _ (Phantom x) = Phantom x
 instance Bifunctor (Phantom R) where bimap _ _ (Phantom x) = Phantom x
 
+type Rf = Re'f T.Range
+instance Uni (Phantom Rf) where uni = wrap Uni'
+instance Sym (Phantom Rf) where sym = p . Sym'
+instance Alt (Phantom Rf) where alt = wrap Alt'
+instance Cut (Phantom Rf) where cut = wrap Cut'
+instance Seq (Phantom Rf) where seq = wrap Seq'
+instance Rep (Phantom Rf) where rep = p . Rep' . forget
+instance Not (Phantom Rf) where not = p . Not' . forget
+instance Eps (Phantom Rf) where eps = p Eps'
+instance Nil (Phantom Rf) where nil = p Nil'
+instance Functor (Phantom Rf f) where fmap _ (Phantom x) = Phantom (FMap x)
+instance Bifunctor (Phantom Rf) where bimap _ _ (Phantom x) = Phantom (FMap x)
+
+data Re'f f = Sym' f | Alt' (Re'f f) (Re'f f) | Cut' (Re'f f) (Re'f f)
+           | Seq' (Re'f f) (Re'f f) | Rep' (Re'f f) | Not' (Re'f f)
+           | Eps' | Nil'
+           | Uni' (Re'f f) (Re'f f) -- (Set.Set (Re'f f))
+           | FMap (Re'f f)
+    deriving (Eq, Ord, Show)
+
+
 -- All uni's should be sorted, und unified, eg like Set.
 -- muck around with contexts like for flattening in the paper?
 -- -- Map should be non-empty, but have no Nils, and no-single eps.
