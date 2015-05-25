@@ -53,8 +53,6 @@ type Range = Maybe [Char]
 -- r = representation
 -- f = failure
 -- s = success
-class Ini r where
-    ini :: r f s
 
 class Sym r where
     sym :: Range -> r SymE Char
