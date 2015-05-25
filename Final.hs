@@ -64,6 +64,9 @@ class (Bifunctor r) => RE r where
     eps :: f -> s -> r f s
     nil :: f -> r f s
 
+eps_ = eps () ()
+nil_ = nil ()
+
 data Both x y f s = Both { one :: (x f s), two :: (y f s) }
 unBoth = (one &&& two)
 both = uncurry Both

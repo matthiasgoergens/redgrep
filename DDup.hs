@@ -112,48 +112,28 @@ nfmap = ID
 nfmap' (ID x) = NFMap id id x
 nfmap' x = x
 
-instance (Bifunctor r, Uni r) => Uni (NFMap r) where
-    uni (un -> x) (un -> y) = ID $ x `uni` y
-
-instance (Bifunctor r, RE r) => RE (NFMap r) where
-    sym = ID . sym
--- TODO: How do you abstract these?
-    alt (un -> x) (un -> y) = ID $ alt x y
-    alt (ID x) (ID y) = ID $ alt x y
-    -- got a choice, could also choose ID.
-    alt (nfmap' -> NFMap fx sx x) (nfmap' -> NFMap fy sy y) =
-        NFMap (bimap fx fy) (bimap sx sy) $ alt x y
-
-    cut (un -> x) (un -> y) = ID $ cut x y
-    cut (ID x) (ID y) = ID $ cut x y
-    cut (nfmap' -> NFMap fx sx x) (nfmap' -> NFMap fy sy y) =
-        NFMap (bimap fx fy) (bimap sx sy) $ cut x y
-
-    seq (un -> x) (un -> y) = ID $ seq x y
-    seq (ID x) (ID y) = ID $ seq x y
-    seq (nfmap' -> NFMap fx sx x) (nfmap' -> NFMap fy sy y) =
-        NFMap (bimap fx $ bimap sx fy) (bimap sx sy) $ seq x y
-
-    rep (un -> x) = ID $ rep x
-    rep (ID x) = ID $ rep x
-    rep (NFMap fx sx x) = NFMap (bimap (fmap sx) fx) (fmap sx) $ rep x
-
-    not (un -> x) = ID $ not x
-    not (ID x) = ID $ not x
-    not (NFMap fx sx x) = NFMap sx fx $ not x
-
-    eps f s = ID (eps f s)
-
-    nil f = ID (nil f)
-
+instance Bifunctor (NFMap r) where
+    -- whole point of NFMap
+    bimap ff sf (nfmap' -> NFMap f s x) = NFMap (ff . f) (sf . s) x
+-- other instances are pretty trivial:
 instance Functor (NFMap r f) where
     fmap = bimap id
-instance Bifunctor (NFMap r) where
-    -- whole point..
-    bimap ff sf (nfmap' -> NFMap f s x) = NFMap (ff . f) (sf . s) x
 
-nfOp op l r = NF $ Map.singleton key val where
-    (Both key val) = op (flatten l) (flatten r)
+onUn op x y = ID $ op (un x) (un y)
+instance (Bifunctor r, Uni r) => Uni (NFMap r) where
+    uni = onUn uni
+instance (Bifunctor r, RE r) => RE (NFMap r) where
+    sym = ID . sym
+    alt = onUn alt
+    cut = onUn cut
+    seq = onUn seq
+    rep = ID . rep . un
+    not = ID . not . un
+    eps = ID .: eps
+    nil = ID . nil
+
+nfOp op l r = NF $ Map.singleton sortKey fullValue where
+    (Both sortKey fullValue) = op (flatten l) (flatten r)
 nfOp1 op x = NF $ Map.singleton key val where
     (Both key val) = op (flatten x)
 
@@ -424,9 +404,6 @@ sain = do
     -- print $ count rex
     -- print $ nf' rex
     return ()
-
-nil_ = nil ()
-eps_ = eps () ()
 
 fain i = do
     -- quadratic again..
