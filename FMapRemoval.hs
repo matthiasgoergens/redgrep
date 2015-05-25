@@ -54,7 +54,7 @@ out (Both a b) = (a, b)
 two :: Both a b x -> b x
 two (Both a b) = b
 
-data NF r b = forall a . NF (a -> b) (r a) | ID (r b)
+data NF r b = ID (r b) | forall a . NF (a -> b) (r a)
 
 instance (Functor r, Add1 r) => Add1 (NF r) where
     p1 (ID r) = ID $ p1 r
@@ -72,64 +72,26 @@ nf (ID r) = r
 nf (NF f r) = fmap f r
 
 
-data NF' r b a = NF'
-    (r a 
-    -> (forall c . (c -> a) -> r a)
-    -> r b)
-instance (Functor r, Add1 r) => Add1 (NF' r b) where
-    p1 (NF' f) = NF' $
-        \ctx -> let x = p1 $ f const
-                in ctx x $ \g -> fmap g x
-    add1 (NF' f) = NF' $
-        \ctx -> let x = add1 $ f const
-                in ctx x $ \g -> fmap g x
-    l i = NF' $ \ctx -> ctx (l i) $ \g -> fmap g (l i)
+type Either' a b = forall c . ((a -> c) -> (b -> c) -> c) -> c
+type Tuple a b = forall c . (a -> b -> c) -> c
 
-add1 :: r x -> r (Int,x)
+-- data Ctx r b = FMap (forall a . ((b -> a) -> r a) (r b)
 
-(Functor f, Add1 f) =>
-  const...
- ((a -> b -> a) -> r x)  -- NF'
+type IDContext r b a = (r b -> r a)
+type FMapContext r b a c = ((c -> b) -> r c -> r a)
 
- -- ctx
- -> (  r (Int, x)
-    -> (((Int, x) -> b1) -> r b1)
-    -> r y)
- -> r y
+-- fmap' :: (b -> b') -> (FMapContext r b a c -> a) -> (FMapContext r b' a c -> a)
 
-instance (Functor r) => Functor (NF' r b) where
-    fmap fn (NF' f) = NF' $ \ctx ->
-        let x = f (flip const)
-        in ctx (fmap fn x) $ \g -> fmap (g . fn) x
 
-:: Functor r =>
- -- fn
- (a -> d)
-    -- flip const
- -- f
- ->            ((b -> c -> c) -> r a)
- -- ctx
- -> (r d -> ((d -> b) -> r b) -> r x)
- -> r x
+data NF' r b = forall a. NF' (r b, ((a -> b), r a))
+-- data NF'' r b --  ...
 
--- curry?
--- a -> b -> f a b
--- fst
--- f a b -> a
--- snd
--- f a b -> b
+conv :: Functor r => NF r b -> NF' r b
+conv (NF f b) = NF' (fmap f b, (f, b))
+conv (ID b) = NF' (b, (id, b))
 
--- dual(?) to either!
--- c -> (c -> a) -> (c -> b) -> f a b
-
--- either!
--- (a -> c) -> (b -> c) -> f a b -> c
-
--- Left
--- a -> f a b
--- Right
--- b -> f a b
-
+((a -> b -> c) -> c) -> c
+((a -> c) -> (b -> c) -> c)
 
 x = add1 . p1 . fmap fst . fmap (fmap (++" world")) . fmap (,"hello") . p1 $ l 10
 y = l 10
