@@ -406,7 +406,8 @@ main' = do
     -- print3 $ cf $ dd' (concat $ replicate 10000 "a") (rep $ sym Nothing)
     -- print3 $ cf $ dd' (concat $ replicate 1250 "a") (rep $ sym Nothing)
 main = do
-    mapM_ fain [10000]
+    mapM_ fain [100]
+sain = do
     let i = 20
     let rex = dd' (concat $ replicate i "a") $
                     bimap (const ()) (const ())
@@ -417,12 +418,13 @@ main = do
 
 fain i = do
     -- quadratic again..
-    print $ (count *** forgetF) . unBoth $
+    print $ ((count *** result) . unBoth *** forgetF) . unBoth $
     -- print $ count $
-        dd' (concat $ replicate i "a") $
-            bimap (const ()) (const ())
-            $ (not nil `seq` not nil) 
-            -- (rep $ sym Nothing)
+        dd' concat $ replicate i "ab") $
+            bimap (const ()) id
+            $ cut (not nil `seq` not nil) 
+                  (rep $ sym Nothing)
+            `seq` (sym (Just "ab"))
     -- print3 $ cf $ dd' (concat $ replicate 2500 "a") (rep $ sym Nothing)
 
 
