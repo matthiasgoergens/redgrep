@@ -93,12 +93,6 @@ instance (Ord f) => Ord (ReE f x y) where
 
 type Range = Maybe [Char]
 
-class RE r where
-    sym :: Range -> r
-    alt :: r -> r -> r
-    seq :: r -> r -> r
-    rep :: r -> r
-
 -- back in Char for now.  TODO: make flexible.
 data ReRes x where
     SymErr :: SymError -> ReRes SymError
