@@ -99,10 +99,6 @@ data NF r f s
 data NFMap r f s
     = forall f' s' . NFMap (f' -> f) (s' -> s) (r f' s')
     | ID (r f s)
-data NFMapFinal r f s
-    = forall f' s' . NFMapFinal
-        (((f'->f) -> (s'->s) -> r f s)
-        -> r f s)
 
 un :: Bifunctor r => NFMap r f s -> r f s
 un (NFMap f s x) = bimap f s x
