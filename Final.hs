@@ -25,10 +25,11 @@ import Control.Arrow ((***), (&&&))
 Progress here:
     - composability solves expression problem.  Since our reg-ex language has quite a few elements,
     this makes exploratory implementation easier!
-    - Functor instance was no problem at all.  (I think I only had problems with this at first,
+    - (Bi)Functor instance was no problem at all.  (I think I only had problems with this at first,
     when I didn't really know how to use GADTs and phantom types properly in the `Initial' version.
+        + Some of the more interesting interpreters have interesting Bifunctor instances.
     - Applicative's pure gives me problem because of my non-uni / multi error type.
-    - We'd need a bi-Applicative, and a bi-functor.
+    - We'd need a bi-functor.  Bi-applicative doesn't work for the same reason that applicative doesn't work.
 -}
 
 -- Before needs to be last, to make merging with max work.
