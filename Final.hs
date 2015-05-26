@@ -7,7 +7,9 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Final where
+import GHC.Generics
 import Data.Bifunctor
 import Control.Applicative
 import Control.Monad
@@ -31,22 +33,22 @@ Progress here:
 
 -- Before needs to be last, to make merging with max work.
 data SymE = TooMany | Wrong Range Char | Before
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic)
 data AltI a b = AltL a | AltR b
-    deriving (Eq, Ord, Show, Functor)
+    deriving (Eq, Ord, Show, Functor, Generic)
 instance Bifunctor AltI where
     bimap f _ (AltL a) = AltL $ f a
     bimap _ g (AltR b) = AltR $ g b
 data CutI a b = Cut a b
-    deriving (Eq, Ord, Show, Functor)
+    deriving (Eq, Ord, Show, Functor, Generic)
 instance Bifunctor CutI where
     bimap f g (Cut a b) = Cut (f a) (g b)
 data SeqI a b = Seq a b
-    deriving (Eq, Ord, Show, Functor)
+    deriving (Eq, Ord, Show, Functor, Generic)
 instance Bifunctor SeqI where
     bimap f g (Seq a b) = Seq (f a) (g b)
 data RepI a = Rep [a]
-    deriving (Eq, Ord, Show, Functor)
+    deriving (Eq, Ord, Show, Functor, Generic)
 
 type Range = Maybe [Char]
 
