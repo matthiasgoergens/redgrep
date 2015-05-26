@@ -11,6 +11,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 import Final hiding (main)
+import Tool
 import ArbitraryFinal
 import Data.Bifunctor
 import Control.Applicative hiding (empty)
@@ -30,14 +31,11 @@ import Data.Ord
 import Control.Arrow ((***),(&&&))
 import Test.QuickCheck
 
--- helper:
-(.:) f g a b = f (g a b)
-
 class Uni r where uni :: r f s -> r f s -> r f s
+
 instance (Uni l, Uni r) => Uni (Both l r) where
     uni (Both l l') (Both r r') = Both (uni l r) (uni l' r')
 instance Uni (Phantom R) where uni = wrapPhantom T.Uni'
-
 instance Uni (Phantom Rf) where uni = wrapPhantom Uni'
 
 -- All uni's should be sorted, und unified, eg like Set.
