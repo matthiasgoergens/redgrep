@@ -9,7 +9,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 module Final where
-import GHC.Generics
+import GHC.Generics hiding (R)
 import Data.Bifunctor
 import Control.Applicative
 import Control.Monad
@@ -19,6 +19,7 @@ import qualified Types as T
 import Util
 import Data.List
 import Data.String
+import Data.Ord
 import Control.Arrow ((***), (&&&))
 
 {-
@@ -88,6 +89,47 @@ instance (Functor (l f), Functor (r f)) => Functor (Both l r f) where
     fmap fn (Both l r) = Both (fmap fn l) (fmap fn r)
 instance (Bifunctor l, Bifunctor r) =>  Bifunctor (Both l r) where
     bimap h g (Both l r) = Both (bimap h g l) (bimap h g r)
+
+newtype Phantom a f s = Phantom { forget :: a }
+    deriving (Generic, Eq, Ord, Show)
+p = Phantom
+
+wrapPhantom op x y = Phantom $ op (forget x) (forget y)
+
+type R = T.Re' T.Range
+instance RE (Phantom R) where
+    sym = p . T.Sym'
+    alt = wrapPhantom T.Alt'
+    cut = wrapPhantom T.Cut'
+    seq = wrapPhantom T.Seq'
+    rep = p . T.Rep' . forget
+    not = p . T.Not' . forget
+    eps _ _ = p T.Eps'
+    nil _ = p T.Nil'
+instance Functor (Phantom R f) where fmap _ (Phantom x) = Phantom x
+instance Bifunctor (Phantom R) where bimap _ _ (Phantom x) = Phantom x
+
+data Re'f f = Sym' f | Alt' (Re'f f) (Re'f f) | Cut' (Re'f f) (Re'f f)
+           | Seq' (Re'f f) (Re'f f) | Rep' (Re'f f) | Not' (Re'f f)
+           | Eps' | Nil'
+           | Uni' (Re'f f) (Re'f f) -- (Set.Set (Re'f f))
+           | Bimap' (Re'f f)
+    deriving (Eq, Ord, Show)
+
+type Rf = Re'f T.Range
+instance RE (Phantom Rf) where
+    sym = p . Sym'
+    alt = wrapPhantom Alt'
+    cut = wrapPhantom Cut'
+    seq = wrapPhantom Seq'
+    rep = p . Rep' . forget
+    not = p . Not' . forget
+    eps _ _ = p Eps'
+    nil _ = p Nil'
+instance Functor (Phantom Rf f) where fmap _ (Phantom x) = Phantom (Bimap' x)
+instance Bifunctor (Phantom Rf) where bimap _ _ (Phantom x) = Phantom (Bimap' x)
+
+
 
 string :: (RE r) => String -> r () String
 string s = foldr h (eps () []) s where

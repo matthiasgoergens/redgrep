@@ -30,58 +30,15 @@ import Data.Ord
 import Control.Arrow ((***),(&&&))
 import Test.QuickCheck
 
-newtype Phantom a f s = Phantom { forget :: a }
-instance (Eq a) => Eq (Phantom a f s) where
-        x == y = forget x == forget y
-instance (Ord a) => Ord (Phantom a f s) where
-        compare = comparing forget
-instance (Show a) => Show (Phantom a f s) where
-    show = show . forget
-p = Phantom
-
-type R = T.Re' T.Range
-
 -- helper:
 (.:) f g a b = f (g a b)
 
-wrap op x y = Phantom $ op (forget x) (forget y)
 class Uni r where uni :: r f s -> r f s -> r f s
 instance (Uni l, Uni r) => Uni (Both l r) where
     uni (Both l l') (Both r r') = Both (uni l r) (uni l' r')
-instance Uni (Phantom R) where uni = wrap T.Uni'
-instance RE (Phantom R) where
-    sym = p . T.Sym'
-    alt = wrap T.Alt'
-    cut = wrap T.Cut'
-    seq = wrap T.Seq'
-    rep = p . T.Rep' . forget
-    not = p . T.Not' . forget
-    eps _ _ = p T.Eps'
-    nil _ = p T.Nil'
-instance Functor (Phantom R f) where fmap _ (Phantom x) = Phantom x
-instance Bifunctor (Phantom R) where bimap _ _ (Phantom x) = Phantom x
+instance Uni (Phantom R) where uni = wrapPhantom T.Uni'
 
-type Rf = Re'f T.Range
-instance Uni (Phantom Rf) where uni = wrap Uni'
-instance RE (Phantom Rf) where
-    sym = p . Sym'
-    alt = wrap Alt'
-    cut = wrap Cut'
-    seq = wrap Seq'
-    rep = p . Rep' . forget
-    not = p . Not' . forget
-    eps _ _ = p Eps'
-    nil _ = p Nil'
-instance Functor (Phantom Rf f) where fmap _ (Phantom x) = Phantom (Bimap' x)
-instance Bifunctor (Phantom Rf) where bimap _ _ (Phantom x) = Phantom (Bimap' x)
-
-data Re'f f = Sym' f | Alt' (Re'f f) (Re'f f) | Cut' (Re'f f) (Re'f f)
-           | Seq' (Re'f f) (Re'f f) | Rep' (Re'f f) | Not' (Re'f f)
-           | Eps' | Nil'
-           | Uni' (Re'f f) (Re'f f) -- (Set.Set (Re'f f))
-           | Bimap' (Re'f f)
-    deriving (Eq, Ord, Show)
-
+instance Uni (Phantom Rf) where uni = wrapPhantom Uni'
 
 -- All uni's should be sorted, und unified, eg like Set.
 -- muck around with contexts like for flattening in the paper?
