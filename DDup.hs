@@ -349,8 +349,9 @@ main' = do
     -- print3 $ cf $ dd' (concat $ replicate 1250 "a") (rep $ sym Nothing)
 main = do
     -- mapM_ fain [100]
-    sample (forgetF . un . flattenForget . unwrap <$> arbitrary)
+    sample (forgetF . un . flattenForget . run <$> (arbitrary :: Gen (REini Int Int)))
     quickCheck prop_or
+    quickCheck prop_and
 sain = do
     let i = 20
     let rex = dd' (concat $ replicate i "a") $
@@ -371,13 +372,21 @@ fain i = do
             `seq` (sym (Just "ab"))
     -- print3 $ cf $ dd' (concat $ replicate 2500 "a") (rep $ sym Nothing)
 
-prop_or (Blind (unwrap -> rx)) (Blind (unwrap -> ry)) s =
+inti :: r Int Int -> r Int Int
+inti = id
+prop_or (inti . run -> rx) (inti . run -> ry) s =
     case (dd s rx, dd s ry, dd s (alt rx ry)) of
         (Left x, Left y, Left xy) -> Cut x y === xy
         (Right x, _, Right x') -> AltL x === x'
         (_, Right y, Right y') -> AltR y === y'
         ((x :: Either Int Int), y, z) -> counterexample (unwords ["Something's wrong: ", show x, show y, show z]) $ False
 
--- prop_or (Blind (unwrap -> rx)) (Blind (unwrap -> ry)) s =
+prop_and (inti . run -> rx) (inti . run -> ry) s =
+     case (dd s rx, dd s ry, dd s (cut rx ry)) of
+        (Left x, _, Left xy) -> AltL x === xy
+        (Right _, Left y, Left y') -> AltR y === y'
+        (Right x, Right y, Right y') -> Cut x y === y'
+        ((x :: Either Int Int), y, z) -> counterexample (unwords ["Something's wrong: ", show x, show y, show z]) $ False
+   
 
 i = rep (sym Nothing)

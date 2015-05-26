@@ -12,6 +12,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE StandaloneDeriving #-}
 module ArbitraryFinal (ArbWrap (..))  where
+import Shrink
 import Final hiding (main)
 import Data.Bifunctor
 import Control.Applicative hiding (empty)
@@ -37,11 +38,13 @@ import Test.QuickCheck.All
 infixr 9 .:
 (.:) f g a b = f (g a b)
 
-newtype ArbWrap r = ArbWrap { unwrap :: r Int Int }
+newtype ArbWrap r = ArbWrap { unwrap :: Both (Phantom Rf) r Int Int }
+instance Show (ArbWrap r) where
+    show = show . one . unwrap
 
-instance (RE r, Bifunctor r) => Arbitrary (ArbWrap r) where
-    arbitrary = ArbWrap <$> arb
-    -- TODO: shrink
+instance Arbitrary (REini Int Int) where
+    arbitrary = arb
+    shrink = shrink'
 a = ArbWrap
 
 arb :: RE r => Gen (r Int Int)
@@ -58,6 +61,9 @@ arb = sized $ \n ->
     in if n <= 0
     then oneof simple
     else oneof $ simple ++ complex
+
+-- shrink' :: forall f s . REini f s -> [REini f s]
+-- shrink' (SymX r) = (SymX <$> shrink r) ++ [EpsX TooMany 'a', NilX TooMany]
 
 instance CoArbitrary SymE
 instance (CoArbitrary x, CoArbitrary y) => CoArbitrary (AltI x y)

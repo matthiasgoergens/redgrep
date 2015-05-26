@@ -8,6 +8,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GADTs #-}
 module Final where
 import GHC.Generics hiding (R)
 import Data.Bifunctor
@@ -71,6 +72,50 @@ class (Bifunctor r) => RE r where
 eps_ = eps () ()
 nil_ = nil ()
 
+data REini f s where
+    SymX :: Range -> REini SymE Char
+    AltX :: REini f s -> REini f' s' -> REini (CutI f f') (AltI s s')
+    CutX :: REini f s -> REini f' s' -> REini (AltI f f') (CutI s s')
+    SeqX :: REini f s -> REini f' s' -> REini (AltI f (SeqI s f')) (SeqI s s') 
+    RepX :: REini f s -> REini (SeqI (RepI s) f) (RepI s)
+    NotX :: REini s f -> REini f s
+    EpsX :: f -> s -> REini f s
+    NilX :: f -> REini f s
+    
+    Bimap :: (f' -> f) -> (s' -> s) -> REini f' s' -> REini f s
+
+instance Show (REini f s) where
+    show = show . rf . forget . run
+
+instance Functor (REini f) where
+    fmap = Bimap id
+instance Bifunctor REini where
+    bimap = Bimap
+instance RE REini where
+    sym = SymX
+    alt = AltX
+    cut = CutX
+    seq = SeqX
+    rep = RepX
+    not = NotX
+    eps = EpsX
+    nil = NilX
+
+run :: (Bifunctor r, RE r) => REini f s -> r f s
+run (SymX r)      = sym r
+run (AltX x y)    = alt (run x) (run y)
+run (CutX x y)    = cut (run x) (run y)
+run (SeqX x y)    = seq (run x) (run y)
+run (RepX x)      = rep (run x)
+run (NotX x)      = not (run x)
+run (EpsX f s)    = eps f s
+run (NilX f)      = nil f
+run (Bimap f s x) = bimap f s (run x)
+
+
+
+
+
 data Both x y f s = Both { one :: (x f s), two :: (y f s) }
 unBoth = (one &&& two)
 both = uncurry Both
@@ -116,6 +161,8 @@ data Re'f f = Sym' f | Alt' (Re'f f) (Re'f f) | Cut' (Re'f f) (Re'f f)
            | Bimap' (Re'f f)
     deriving (Eq, Ord, Show)
 
+rf :: Rf -> Rf
+rf = id
 type Rf = Re'f T.Range
 instance RE (Phantom Rf) where
     sym = p . Sym'
@@ -128,8 +175,6 @@ instance RE (Phantom Rf) where
     nil _ = p Nil'
 instance Functor (Phantom Rf f) where fmap _ (Phantom x) = Phantom (Bimap' x)
 instance Bifunctor (Phantom Rf) where bimap _ _ (Phantom x) = Phantom (Bimap' x)
-
-
 
 string :: (RE r) => String -> r () String
 string s = foldr h (eps () []) s where

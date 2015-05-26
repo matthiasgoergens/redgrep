@@ -41,7 +41,7 @@ data FMap a x y -- where
 --    FMap :: (x a -> y a) -> x a -> FMap a (x a) (y a)
     deriving (Typeable)
 
--- Less types, for easier generation.
+-- Less types, for easier generation, and showing, sorting, equality.
 data Re' f = Sym' f | Alt' (Re' f) (Re' f) | Cut' (Re' f) (Re' f)
            | Seq' (Re' f) (Re' f) | Rep' (Re' f) | Not' (Re' f)
            | Eps' | Nil'
