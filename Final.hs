@@ -86,9 +86,11 @@ instance (RE l, RE r) => RE (Both l r) where
 
 instance (Functor (l f), Functor (r f)) => Functor (Both l r f) where
     fmap fn (Both l r) = Both (fmap fn l) (fmap fn r)
-
 instance (Bifunctor l, Bifunctor r) =>  Bifunctor (Both l r) where
     bimap h g (Both l r) = Both (bimap h g l) (bimap h g r)
+
+
+
 
 instance IsString (Backtrack y x () String) where
     fromString = string
