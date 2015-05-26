@@ -11,6 +11,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 import Final hiding (main)
+import ArbitraryFinal
 import Data.Bifunctor
 import Control.Applicative hiding (empty)
 import Control.Monad
@@ -27,6 +28,7 @@ import Data.String
 import Data.Function (on)
 import Data.Ord
 import Control.Arrow ((***),(&&&))
+import Test.QuickCheck
 
 newtype Phantom a f s = Phantom { forget :: a }
 instance (Eq a) => Eq (Phantom a f s) where
@@ -395,7 +397,9 @@ main' = do
     -- print3 $ cf $ dd' (concat $ replicate 10000 "a") (rep $ sym Nothing)
     -- print3 $ cf $ dd' (concat $ replicate 1250 "a") (rep $ sym Nothing)
 main = do
-    mapM_ fain [100]
+    -- mapM_ fain [100]
+    sample (forgetF . un . flattenForget . unwrap <$> arbitrary)
+    quickCheck prop_or
 sain = do
     let i = 20
     let rex = dd' (concat $ replicate i "a") $
@@ -416,5 +420,13 @@ fain i = do
             `seq` (sym (Just "ab"))
     -- print3 $ cf $ dd' (concat $ replicate 2500 "a") (rep $ sym Nothing)
 
+prop_or (Blind (unwrap -> rx)) (Blind (unwrap -> ry)) s =
+    case (dd s rx, dd s ry, dd s (alt rx ry)) of
+        (Left x, Left y, Left xy) -> Cut x y === xy
+        (Right x, _, Right x') -> AltL x === x'
+        (_, Right y, Right y') -> AltR y === y'
+        ((x :: Either Int Int), y, z) -> counterexample (unwords ["Something's wrong: ", show x, show y, show z]) $ False
+
+-- prop_or (Blind (unwrap -> rx)) (Blind (unwrap -> ry)) s =
 
 i = rep (sym Nothing)
