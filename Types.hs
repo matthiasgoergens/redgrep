@@ -89,7 +89,6 @@ instance (Eq f) => Eq (ReE f x y) where
     -- Or switch to Re'?
     -- (FMapE _ _ x) == (FMapE _ _ x') = x == x'
     _ == _ = False
-instance (Ord f) => Ord (ReE f x y) where
 
 type Range = Maybe [Char]
 
