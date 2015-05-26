@@ -74,9 +74,6 @@ data Both x y f s = Both { one :: (x f s), two :: (y f s) }
 unBoth = (one &&& two)
 both = uncurry Both
 
-duplicate :: Both l r f s -> Both l r f s
-duplicate (Both l r) = Both l r
-
 instance (RE l, RE r) => RE (Both l r) where
     sym range = Both (sym range) (sym range)
     alt (Both l l') (Both r r') = Both (alt l r) (alt l' r')
