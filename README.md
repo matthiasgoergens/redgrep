@@ -1,7 +1,7 @@
 redgrep
 =======
 
-Re-implementing redgrep in Haskell.  With an Applicative interface.
+Re-implementing redgrep in Haskell.  With an Applicative interface.  (Or at least an non-monadic one.)
 
 This is a regular expression matcher that also support intersection and complement
 in addition to the traditional regular expression operations.
