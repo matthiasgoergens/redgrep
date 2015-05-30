@@ -409,8 +409,9 @@ prop_not' (Shield (run -> r)) s =
 -- Rep' (Seq' (Sym' Nothing) (Rep' (Not' Nil')))
 -- Rep' (Alt' (Not' Nil') (Sym' Nothing))
 problem = toShield $ Rep' (Rep' (Not' (Sym' Nothing)))
+-- problem = toShield $ (Rep' (Not' (Sym' Nothing)))
 
-problemify = case problem of Shield r -> map forgetF $ dd_ (repeat 'a') $ run r
+problemify = case problem of Shield r -> map (r' . forget) $ dd_ (repeat 'a') $ run r
 
 prop_size :: Shield REini -> Property
 prop_size (Shield r) =
