@@ -45,7 +45,7 @@ data FMap a x y -- where
 data Re' f = Sym' f | Alt' (Re' f) (Re' f) | Cut' (Re' f) (Re' f)
            | Seq' (Re' f) (Re' f) | Rep' (Re' f) | Not' (Re' f)
            | Eps' | Nil'
-           | Uni' (Re' f) (Re' f) -- (Set.Set (Re' f))
+           | Uni' [Re' f] -- (Set.Set (Re' f))
     deriving (Typeable, Eq, Ord, Show)
 
 -- TODO: Add Char as variable.

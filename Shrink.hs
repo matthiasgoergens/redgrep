@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 module Shrink where
 import Prelude hiding (seq, not)
+import qualified Prelude as P
 
 import Final
 import Test.QuickCheck
@@ -32,7 +33,7 @@ shrink' (EpsX f s) = [NilX f]
 shrink' (NilX f) = []
 shrink' (Bimap f s x) = Bimap f s <$> shrink' x
 
-data Shield r = forall f s . Shield (r f s)
+data Shield r = forall f s . Shield { unShield :: r f s }
 instance Show (Shield REini) where
     show (Shield r) = show r
 
@@ -45,7 +46,7 @@ toShield (Rep' x) = repS (toShield x)
 toShield (Not' x) = notS (toShield x)
 toShield Eps' = Shield eps_
 toShield Nil' = Shield nil_
-toShield (Uni' x y) = uniS (toShield x) (toShield y)
+toShield (Uni' l) = uniS (map toShield l)
 toShield (Bimap' x) = bimapS (toShield x)
 
 out :: Bifunctor r => Shield r -> r () ()
@@ -60,7 +61,8 @@ repS (Shield x) = Shield (rep x)
 notS (Shield x) = Shield (not x)
 
 -- need's a `trust me'
-uniS (Shield x) (Shield y) = Shield (uni (blunt x) (blunt y))
+uniS :: [Shield REini] -> Shield REini
+uniS = Shield . uni . (map $ \(Shield x) -> blunt x)
 bimapS (Shield x) = Shield (bimap id id x)
 
 shrink2 op (Shield x) (Shield y)
@@ -96,3 +98,8 @@ shrinkS (Shield (NilX f))
     = []
 shrinkS (Shield (Bimap f s x))
     = Shield nil_ : Shield eps_ : Shield x : shrinkS (Shield x)
+shrinkS (Shield (UniX l))
+    = Shield nil_ : Shield eps_ : 
+      map uniS (filter (P.not . null) (shrink $ map Shield l))
+
+-- t :: [Shield x] -> Shield x

@@ -59,12 +59,15 @@ type Range = Maybe [Char]
 -- f = failure
 -- s = success
 
-class Uni r where uni :: NonEmpty (r f s) -> r f s
+-- Should be NonEmpty list, but that package doesn't work right now..
+class Uni r where uni :: [r f s] -> r f s
 
 instance (Uni l, Uni r) => Uni (Both l r) where
-    uni (Both l l') (Both r r') = Both (uni l r) (uni l' r')
-instance Uni (Phantom R) where uni = wrapPhantom T.Uni'
-instance Uni (Phantom Rf) where uni = wrapPhantom Uni'
+    uni [] = error "Both: empty uni"
+    uni [x] = x
+    uni l = liftA2 Both (uni . map one) (uni . map two) $ l
+instance Uni (Phantom R) where uni = Phantom . T.Uni' . map forget
+instance Uni (Phantom Rf) where uni l = Phantom . Uni' . map forget $ l
 
 
 class (Bifunctor r) => RE r where
@@ -91,7 +94,7 @@ data REini f s where
     NilX :: f -> REini f s
     
     Bimap :: (f' -> f) -> (s' -> s) -> REini f' s' -> REini f s
-    UniX :: REini f s -> REini f s -> REini f s
+    UniX :: [REini f s] -> REini f s
 
 instance Show (REini f s) where
     show = show . rf . forget . run
@@ -110,7 +113,9 @@ instance RE REini where
     eps = EpsX
     nil = NilX
 instance Uni REini where
-    uni = UniX
+    uni [] = error "Empty uni"
+    -- TODO: Consider short-cutting singleton uni?
+    uni l = UniX l
 
 run :: (Bifunctor r, RE r, Uni r) => REini f s -> r f s
 run (SymX r)      = sym r
@@ -122,7 +127,7 @@ run (NotX x)      = not (run x)
 run (EpsX f s)    = eps f s
 run (NilX f)      = nil f
 run (Bimap f s x) = bimap f s (run x)
-run (UniX x y) = uni (run x) (run y)
+run (UniX l) = uni (map run l)
 
 
 
@@ -167,7 +172,7 @@ instance Bifunctor (Phantom R) where bimap _ _ (Phantom x) = Phantom x
 data Re'f f = Sym' f | Alt' (Re'f f) (Re'f f) | Cut' (Re'f f) (Re'f f)
            | Seq' (Re'f f) (Re'f f) | Rep' (Re'f f) | Not' (Re'f f)
            | Eps' | Nil'
-           | Uni' (Re'f f) (Re'f f) -- (Set.Set (Re'f f))
+           | Uni' [Re'f f] -- (Set.Set (Re'f f))
            | Bimap' (Re'f f)
     deriving (Eq, Ord, Show)
 

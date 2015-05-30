@@ -31,6 +31,7 @@ import Data.Function (on)
 import Data.Ord
 import Control.Arrow ((***),(&&&))
 import Test.QuickCheck
+import Data.Either
 
 -- All uni's should be sorted, und unified, eg like Set.
 -- muck around with contexts like for flattening in the paper?
@@ -68,7 +69,9 @@ instance Functor (NFMap r f) where
 
 onUn op x y = ID $ op (un x) (un y)
 instance (Bifunctor r, Uni r) => Uni (NFMap r) where
-    uni = onUn uni
+    uni [] = error "NFMap: empty uni"
+    uni [x] = x
+    uni l = ID . uni . map un $ l
 instance (Bifunctor r, RE r) => RE (NFMap r) where
     sym = ID . sym
     alt = onUn alt
@@ -92,7 +95,7 @@ flattenForget = two . two . flatten
 -- Only works on non-empty maps!
 -- TODO: filter out the nils, too.
 flatten :: (Uni r, Bifunctor r, RE r) => NF r f s -> Both (Phantom R) (Both Either r) f s
-flatten (NF l) = foldr1 uni . map (uncurry Both) $ Map.toList $ l where
+flatten (NF l) = uni . map (uncurry Both) $ Map.toList $ l where
 flatten (IsNil f) = nil f
 flatten (IsEps f s) = eps f s
 
@@ -142,23 +145,33 @@ instance (Uni r, Bifunctor r, RE r) => Bifunctor (NF r) where
 
 -- The whole point of this NF exercise:
 instance (Uni r, RE r, Bifunctor r) => Uni (NF r) where
-    uni (NF l) (NF r) = NF $ Map.union l r
-    uni (NF l) (IsEps f s) = NF $ Map.insert
-        (eps undefined undefined) (eps f s) l
-    uni (IsEps f s) (NF l) = NF $ Map.insert
-        (eps undefined undefined) (eps f s) l
-    uni l@(IsEps _ _) (IsEps _ _) = l
-    uni (IsNil _) r = r
-    uni l (IsNil _) = l
+-- TODO: check for nil etc.  like below.
+--       ie normalize.
+    uni [] = error "empty uni"
+    uni [x] = x
+    uni l = NF . Map.unions . map normalize $ l where
+        normalize x = case x of
+            NF l -> l
+            IsEps f s -> Map.singleton (eps undefined undefined) (eps f s)
+            IsNil f -> Map.singleton (nil f) (nil f)
+--    uni (NF l) (NF r) = NF $ Map.union l r
+--    uni (NF l) (IsEps f s) = NF $ Map.insert
+--        (eps undefined undefined) (eps f s) l
+--    uni (IsEps f s) (NF l) = NF $ Map.insert
+--        (eps undefined undefined) (eps f s) l
+--    uni l@(IsEps _ _) (IsEps _ _) = l
+--    uni (IsNil _) r = r
+--    uni l (IsNil _) = l
     
 forget' :: Phantom R f s -> R
 forget' = forget
 
-newtype Count f s = Count Int
-    deriving (Show, Eq, Ord)
+newtype Count f s = Count { unCount :: Int }
+    deriving (Show, Eq, Ord, Num)
 plus (Count l) (Count r) = Count $ l + 1 + r
 
-instance Uni Count where uni = plus
+-- TODO: make use of Num instance.
+instance Uni Count where uni l = Count $ 1 + sum (map unCount l)
 instance RE Count where
     sym = const (Count 1)
     alt = plus
@@ -181,8 +194,10 @@ b = sym (Just "b")
 
 -- Wrap in newtype, if we ever have any problems.
 instance Uni Either where
-    uni (Left _) r = r
-    uni r@(Right _) _ = r
+    -- Right before left, and l has to have at least one element.
+    uni [] = error "Either: empty uni"
+    uni [x] = x
+    uni l = head $ sortBy (comparing isLeft) l
 instance RE Either where
     sym range = Left Before
 
@@ -216,8 +231,10 @@ data D r f s = D { unD :: Char -> r f s
 dOp2 op1 op2 op3 (D d n v) (D d' n' v') = D (liftA2 op1 d d') (op2 n n') (op3 v v')
 dOp1 op1 op2 op3 (D d n v) = D (liftA op1 d) (op2 n) (op3 v)
 
-instance (Uni r) => Uni (D r) where uni = dOp2 uni uni uni
-    
+instance (Uni r) => Uni (D r) where
+    uni [] = error "Empty uni"
+    uni [x] = x
+    uni l = liftA3 D (uni .: traverse unD)  (uni . map now) (uni . map v) l
 instance (Uni r, Bifunctor r, RE r) => RE (D r) where
     sym range = D (\char -> case rangeMatch range char of
         Nothing -> nil (Wrong range char)
@@ -231,8 +248,7 @@ instance (Uni r, Bifunctor r, RE r) => RE (D r) where
 -- Might need Uni?
 -- TODO: 
     seq (D r n v) (D r' n' v') =
-        D (\c -> either (flip const) (uni . f c) v
-                    (r c `seq` n'))
+        D (\c -> uni $ (r c `seq` n') : rights [fmap (f c) v])
           (n `seq` n')
           (v `seq` v')
         where
