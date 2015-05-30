@@ -59,6 +59,14 @@ type Range = Maybe [Char]
 -- f = failure
 -- s = success
 
+class Uni r where uni :: r f s -> r f s -> r f s
+
+instance (Uni l, Uni r) => Uni (Both l r) where
+    uni (Both l l') (Both r r') = Both (uni l r) (uni l' r')
+instance Uni (Phantom R) where uni = wrapPhantom T.Uni'
+instance Uni (Phantom Rf) where uni = wrapPhantom Uni'
+
+
 class (Bifunctor r) => RE r where
     sym :: Range -> r SymE Char
     alt :: r f s -> r f' s' -> r (CutI f f') (AltI s s')
@@ -83,6 +91,7 @@ data REini f s where
     NilX :: f -> REini f s
     
     Bimap :: (f' -> f) -> (s' -> s) -> REini f' s' -> REini f s
+    UniX :: REini f s -> REini f s -> REini f s
 
 instance Show (REini f s) where
     show = show . rf . forget . run
@@ -100,8 +109,10 @@ instance RE REini where
     not = NotX
     eps = EpsX
     nil = NilX
+instance Uni REini where
+    uni = UniX
 
-run :: (Bifunctor r, RE r) => REini f s -> r f s
+run :: (Bifunctor r, RE r, Uni r) => REini f s -> r f s
 run (SymX r)      = sym r
 run (AltX x y)    = alt (run x) (run y)
 run (CutX x y)    = cut (run x) (run y)
@@ -111,8 +122,7 @@ run (NotX x)      = not (run x)
 run (EpsX f s)    = eps f s
 run (NilX f)      = nil f
 run (Bimap f s x) = bimap f s (run x)
-
-
+run (UniX x y) = uni (run x) (run y)
 
 
 
@@ -161,8 +171,17 @@ data Re'f f = Sym' f | Alt' (Re'f f) (Re'f f) | Cut' (Re'f f) (Re'f f)
            | Bimap' (Re'f f)
     deriving (Eq, Ord, Show)
 
+blunt = bimap (const ()) (const ())
+
 rf :: Rf -> Rf
 rf = id
+
+r' :: R -> R
+r' = id
+
+forgetF :: Phantom Rf f s -> Rf
+forgetF = forget 
+
 type Rf = Re'f T.Range
 instance RE (Phantom Rf) where
     sym = p . Sym'

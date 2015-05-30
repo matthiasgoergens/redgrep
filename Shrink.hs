@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Shrink where
 import Prelude hiding (seq, not)
 
@@ -32,10 +33,23 @@ shrink' (NilX f) = []
 shrink' (Bimap f s x) = Bimap f s <$> shrink' x
 
 data Shield r = forall f s . Shield (r f s)
+instance Show (Shield REini) where
+    show (Shield r) = show r
+
+toShield :: Rf -> Shield REini
+toShield (Sym' r) = Shield (SymX r)
+toShield (Alt' x y) = altS (toShield x) (toShield y)
+toShield (Cut' x y) = cutS (toShield x) (toShield y)
+toShield (Seq' x y) = seqS (toShield x) (toShield y)
+toShield (Rep' x) = repS (toShield x)
+toShield (Not' x) = notS (toShield x)
+toShield Eps' = Shield eps_
+toShield Nil' = Shield nil_
+toShield (Uni' x y) = uniS (toShield x) (toShield y)
+toShield (Bimap' x) = bimapS (toShield x)
 
 out :: Bifunctor r => Shield r -> r () ()
 out (Shield r) = bimap (const ()) (const ()) r
-
 
 altS, cutS :: RE r => Shield r -> Shield r -> Shield r
 altS (Shield x) (Shield y) = Shield (alt x y)
@@ -45,11 +59,17 @@ seqS (Shield x) (Shield y) = Shield (seq x y)
 repS (Shield x) = Shield (rep x)
 notS (Shield x) = Shield (not x)
 
+-- need's a `trust me'
+uniS (Shield x) (Shield y) = Shield (uni (blunt x) (blunt y))
+bimapS (Shield x) = Shield (bimap id id x)
+
 shrink2 op (Shield x) (Shield y)
     = Shield nil_ : Shield eps_ : Shield x : Shield y
-    : tail (op <$> shrinkS' (Shield x) <*> shrinkS' (Shield y))
+    : (if (rf . forget) (run x) > (rf . forget) (run y) then [op (Shield y) (Shield x)] else [])
+    ++ tail (op <$> shrinkS' (Shield x) <*> shrinkS' (Shield y))
 shrink1 op (Shield x)
     = Shield nil_ : Shield eps_
+    : Shield x
     : (op <$> shrinkS (Shield x))
 
 shrinkS' :: Shield REini -> [Shield REini]
@@ -74,3 +94,5 @@ shrinkS (Shield (EpsX f s))
     = [Shield $ NilX f]
 shrinkS (Shield (NilX f))
     = []
+shrinkS (Shield (Bimap f s x))
+    = Shield nil_ : Shield eps_ : Shield x : shrinkS (Shield x)
