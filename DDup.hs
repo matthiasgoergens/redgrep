@@ -231,16 +231,12 @@ instance (Uni r, Bifunctor r, RE r) => RE (D r) where
 -- Might need Uni?
 -- TODO: 
     seq (D r n v) (D r' n' v') =
-        D (case v of
-            Left _ -> \c -> r c `seq` n'
-            Right x -> \c -> (r c `seq` n') `uni`
-                             (bimap (fc x) (sc x) $ r' c))
+        D (\c -> either (flip const) (uni . f c) v
+                    (r c `seq` n'))
           (n `seq` n')
           (v `seq` v')
-        where fc x f = AltR (Seq x f)
-              -- seems somewhat fishy.
-              sc x s = Seq x s
-
+        where
+            f c x = bimap (AltR . Seq x) (Seq x) $ r' c
     rep (D r n v) = D
         (\c -> bimap fc sc $ r c `seq` rep n)
         (rep n)
