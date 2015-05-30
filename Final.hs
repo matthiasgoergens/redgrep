@@ -59,7 +59,7 @@ type Range = Maybe [Char]
 -- f = failure
 -- s = success
 
-class Uni r where uni :: r f s -> r f s -> r f s
+class Uni r where uni :: NonEmpty (r f s) -> r f s
 
 instance (Uni l, Uni r) => Uni (Both l r) where
     uni (Both l l') (Both r r') = Both (uni l r) (uni l' r')
