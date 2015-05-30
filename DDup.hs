@@ -422,8 +422,9 @@ i = rep (sym Nothing)
 
 main = do
     -- mapM_ fain [100]
-    sample (forgetF . un . flattenForget . run <$> (arbitrary :: Gen (REini Int Int)))
-    verboseCheck prop_size
+    -- sample (forgetF . un . flattenForget . run <$> (arbitrary :: Gen (REini Int Int)))
+    -- verboseCheck prop_size
+    mapM_ (\x -> print x >> putStrLn "") $ problemify
 
 mainTests = do
     putStrLn ""
