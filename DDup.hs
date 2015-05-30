@@ -143,17 +143,24 @@ instance (Uni r, Bifunctor r, RE r) => Bifunctor (NF r) where
     bimap ff sf (IsEps f s) = IsEps (ff f) (sf s)
     bimap ff sf x = nfOp1 (bimap ff sf) x
 
+isNil (IsNil _) = True
+isNil _ = False
 -- The whole point of this NF exercise:
 instance (Uni r, RE r, Bifunctor r) => Uni (NF r) where
 -- TODO: check for nil etc.  like below.
 --       ie normalize.
-    uni [] = error "empty uni"
-    uni [x] = x
-    uni l = NF . Map.unions . map normalize $ l where
-        normalize x = case x of
-            NF l -> l
-            IsEps f s -> Map.singleton (eps undefined undefined) (eps f s)
-            IsNil f -> Map.singleton (nil f) (nil f)
+    uni l = case partition isNil l of
+        ((x:_), []) -> x
+        ([], []) -> error "NF: empty uni"
+        (_, l) -> case Map.updateLookupWithKey ((const.const) Nothing) (Phantom T.Nil') $ Map.unions . map normalize $ l of
+            (_, m) | P.not (Map.null m) -> NF m
+            (Just (Both (Left f) _), _) -> IsNil f
+            _ -> error "NF: shouldn't happen"
+     where
+            normalize x = case x of
+                NF l -> l
+                IsEps f s -> Map.singleton (eps undefined undefined) (eps f s)
+                IsNil f -> Map.singleton (nil f) (nil f)
 --    uni (NF l) (NF r) = NF $ Map.union l r
 --    uni (NF l) (IsEps f s) = NF $ Map.insert
 --        (eps undefined undefined) (eps f s) l

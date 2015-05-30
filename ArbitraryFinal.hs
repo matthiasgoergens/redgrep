@@ -84,17 +84,23 @@ s = "\217\&5\226:J\ETX@<or7W>)\133c\162s\254\177\173\DELGO"
 --     else oneof $ simple ++ complex
 
 
-arb :: RE r => Gen (r Int Int)
+arb :: forall r . RE r => Gen (r Int Int)
 arb = sized $ \n ->
     let simple = [ bimap <$> arbitrary <*> arbitrary <*> (sym <$> arbitrary)
                  , eps <$> arbitrary <*> arbitrary
                  , nil <$> arbitrary ]
         r1 = resize (n-1)
         r2 = resize (n `div` 2)
+        -- TODO: Check out which extension I need to make this work without the ticks.
         on2 op = r2 $ bimap <$> arbitrary <*> arbitrary <*>  
             (op <$> arb <*> arb)
+        on2' op = r2 $ bimap <$> arbitrary <*> arbitrary <*>  
+            (op <$> arb <*> arb)
+        on2'' op = r2 $ bimap <$> arbitrary <*> arbitrary <*>  
+            (op <$> arb <*> arb)
         on1 op = r1 $ bimap <$> arbitrary <*> arbitrary <*> (op <$> arb)
-        complex = [ on2 alt, on2 cut, on2 seq, on1 rep, on1 not ]
+        on1' op = r1 $ bimap <$> arbitrary <*> arbitrary <*> (op <$> arb)
+        complex = [ on2 alt, on2' cut, on2'' seq, on1 rep, on1' not ]
     in if n <= 0
     then oneof simple
     else oneof $ simple ++ complex
