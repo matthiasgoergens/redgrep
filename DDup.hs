@@ -142,7 +142,10 @@ instance (Uni r, Bifunctor r, RE r) => Functor (NF r f) where
 instance (Uni r, Bifunctor r, RE r) => Bifunctor (NF r) where
     bimap ff _ (IsNil f) = IsNil $ ff f
     bimap ff sf (IsEps f s) = IsEps (ff f) (sf s)
-    bimap ff sf x = nfOp1 (bimap ff sf) x
+    -- Push bimaps below Uni.  (Normally the types only allow us to push bimap up past eg Alt,
+    -- but for Uni it's the exact opposite.)
+    -- The bimap on the keys is actually a no-op in value land.
+    bimap ff sf (NF m) = NF . Map.fromList . fmap (bimap (bimap ff sf) (bimap ff sf)) . Map.toList $ m
 
 isNil (IsNil _) = True
 isNil _ = False
