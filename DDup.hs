@@ -256,8 +256,6 @@ instance (Uni r, Bifunctor r, RE r) => RE (D r) where
     alt = dOp2 alt alt alt
     cut = dOp2 cut cut cut
 
--- Might need Uni?
--- TODO: 
     seq (D r n v) (D r' n' v') =
         D (\c -> uni $ (r c `seq` n') : rights [fmap (f c) v])
           (n `seq` n')
