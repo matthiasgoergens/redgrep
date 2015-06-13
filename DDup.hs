@@ -239,6 +239,19 @@ data D r f s = D { unD :: Char -> r f s
 dOp2 op1 op2 op3 (D d n v) (D d' n' v') = D (liftA2 op1 d d') (op2 n n') (op3 v v')
 dOp1 op1 op2 op3 (D d n v) = D (liftA op1 d) (op2 n) (op3 v)
 
+class SeqRep r where
+    seqRep :: r f s -> r f s -> r (SeqI (RepI s) f) (RepI s)
+instance SeqRep (D r) where
+--     seqRep (D r n v) d = D
+--         (\c -> bimap fc sc $ r c `seq` rep n)
+--         (rep n)
+--         (rep v)
+--         -- TODO: How do we get more than one element in the list?
+--         where fc (AltL f) = Seq (Rep []) f
+--               fc (AltR (Seq x (Seq (Rep xs) f))) = Seq (Rep $ x:xs) f
+--               -- TODO: How do we get more than two elements in the list?
+--               sc (Seq l (Rep r)) = Rep $ l : r
+
 instance (Uni r) => Uni (D r) where
     uni [] = error "Empty uni"
     uni [x] = x
@@ -270,6 +283,7 @@ instance (Uni r, Bifunctor r, RE r) => RE (D r) where
               fc (AltR (Seq x (Seq (Rep xs) f))) = Seq (Rep $ x:xs) f
               -- TODO: How do we get more than two elements in the list?
               sc (Seq l (Rep r)) = Rep $ l : r
+    rep d = seqRep d d
 
     not = dOp1 not not not
     eps f s = D (const $ nil f) (eps f s) (eps f s)
