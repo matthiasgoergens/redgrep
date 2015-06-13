@@ -32,6 +32,7 @@ import Data.Ord
 import Control.Arrow ((***),(&&&))
 import Test.QuickCheck
 import Data.Either
+import Text.PrettyPrint.GenericPretty
 
 -- All uni's should be sorted, und unified, eg like Set.
 -- muck around with contexts like for flattening in the paper?
@@ -447,7 +448,7 @@ main = do
     -- mapM_ fain [100]
     -- sample (forgetF . un . flattenForget . run <$> (arbitrary :: Gen (REini Int Int)))
     -- verboseCheck prop_size
-    mapM_ (\x -> print x >> putStrLn "") $ problemify
+    mapM_ (\x -> pp x >> putStrLn "") $ problemify
 
 mainTests = do
     putStrLn ""

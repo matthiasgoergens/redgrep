@@ -2,9 +2,11 @@
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Types where
 import qualified Data.Set as Set
 import Data.Typeable
+import Text.PrettyPrint.GenericPretty
 
 -- Actually, we don't need any constructors for these.
 -- They can exists solely on the type level.
@@ -46,7 +48,9 @@ data Re' f = Sym' f | Alt' (Re' f) (Re' f) | Cut' (Re' f) (Re' f)
            | Seq' (Re' f) (Re' f) | Rep' (Re' f) | Not' (Re' f)
            | Eps' | Nil'
            | Uni' [Re' f] -- (Set.Set (Re' f))
-    deriving (Typeable, Eq, Ord, Show)
+    deriving (Typeable, Eq, Ord, Show, Generic)
+
+instance (Out f) => Out (Re' f)
 
 -- TODO: Add Char as variable.
 data SymError = BeforeSym | GotWrong | AfterSym

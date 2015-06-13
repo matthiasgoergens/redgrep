@@ -23,6 +23,8 @@ import Data.String
 import Data.Ord
 import Control.Arrow ((***), (&&&))
 
+import Text.PrettyPrint.GenericPretty
+
 {-
 Progress here:
     - composability solves expression problem.  Since our reg-ex language has quite a few elements,
@@ -174,7 +176,9 @@ data Re'f f = Sym' f | Alt' (Re'f f) (Re'f f) | Cut' (Re'f f) (Re'f f)
            | Eps' | Nil'
            | Uni' [Re'f f] -- (Set.Set (Re'f f))
            | Bimap' (Re'f f)
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Generic)
+
+instance (Out f) => Out (Re'f f)
 
 blunt = bimap (const ()) (const ())
 
