@@ -431,39 +431,69 @@ prop_and' (Shield (run -> rx)) (Shield (run -> ry)) s =
 prop_not' (Shield (run -> r)) s =
     blunt (dd s r) === switch (blunt $ dd s (not r))
 
+prop_seq1 (Shield (run -> rs)) (Shield (run -> rt)) s t =
+    case (dd' s rs, dd' t rt) of
+        (Right _, Right _) -> isRight $ dd' (s++t) (seq      rs  rt)
+        (Left _, Right _)  -> isRight $ dd' (s++t) (seq (not rs) rt)
+        (Right _, Left _)  -> isRight $ dd' (s++t) (seq      rs  (not rt))
+        (Left _, Left _)   -> isRight $ dd' (s++t) (seq (not rs) (not rt))
+prop_seq2 (Shield (run -> rs)) (Shield (run -> rt)) s =
+    case (dd' s (seq rs rt), both) of
+        (Right _, (_:_)) -> True
+        (Left _, []) -> True
+        _ -> False
+  where
+    both = filter id $ zipWith (&&) starts ends
+    starts = map (isRight . flip dd' rs) $ inits s
+    ends = map (isRight . flip dd' rt) $ tails s
+
+
 -- Rep' (Seq' (Sym' Nothing) (Rep' (Not' Nil')))
 -- Rep' (Alt' (Not' Nil') (Sym' Nothing))
 problem = toShield $ Rep' (Rep' (Not' (Sym' Nothing)))
 -- problem = toShield $ (Rep' (Not' (Sym' Nothing)))
 
-problemify = case problem of Shield r -> map (r' . forget) $ dd_ (repeat 'a') $ run r
+-- no longer a problem.  Thanks to NF's uni case.
+problemify = case problem of Shield r -> map (rf . forget) $ dd_ (repeat 'a') $ run r
 
+-- It's not formally justified with these values, but does alert on crazy (eg exponential) growth.
 prop_size :: Shield REini -> Property
 prop_size (Shield r) =
     count (run r) < 50 ==>
     null . dropWhile (<5000) . take 100 . map count $ dd_ (repeat 'a') (run r)
 
+-- prop_uniUni :: Shield REini -> Property
+-- prop_uniUni (Shield r) =
+--     count (run r) < 10 ==>
+--     take 100 . map (r' . forget) $ dd_ (repeat 'a') (run r)
+
 i = rep (sym Nothing)
 
-main = do
+mainSingle = do
     -- mapM_ fain [100]
     -- sample (forgetF . un . flattenForget . run <$> (arbitrary :: Gen (REini Int Int)))
-    -- verboseCheck prop_size
+    -- quickCheck prop_size
     mapM_ (\x -> pp x >> putStrLn "") $ problemify
 
-mainTests = do
+main = do
     putStrLn ""
     putStrLn "prop_and'"
-    verboseCheck prop_and'
---    putStrLn ""
---    putStrLn "prop_and"
---    quickCheck prop_and
+    quickCheck prop_and'
+    putStrLn ""
+    putStrLn "prop_and"
+    quickCheck prop_and
     putStrLn ""
     putStrLn "prop_or'"
-    verboseCheck prop_or'
---    putStrLn ""
---    putStrLn "prop_or"
---    quickCheck prop_or
+    quickCheck prop_or'
+    putStrLn ""
+    putStrLn "prop_or"
+    quickCheck prop_or
     putStrLn ""
     putStrLn "prop_not'"
-    verboseCheck prop_not'
+    quickCheck prop_not'
+    putStrLn ""
+    putStrLn "prop_seq1"
+    quickCheck prop_seq1
+    putStrLn ""
+    putStrLn "prop_seq2"
+    quickCheck prop_seq2
