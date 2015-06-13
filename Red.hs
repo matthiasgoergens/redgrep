@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs,TupleSections,TemplateHaskell,ViewPatterns #-}
 {-# LANGUAGE ExistentialQuantification, ScopedTypeVariables, RankNTypes #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts #-}
+-- Obsolote approach from when I didn't know what I was doing.  Some might be useful.
 module Red where
 -- import Data.Foldable hiding (fold, concatMap, foldr, elem, foldl, mapM_)
 import Prelude hiding (sequence, mapM)
