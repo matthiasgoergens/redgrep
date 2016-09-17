@@ -11,6 +11,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ViewPatterns #-}
+module DDup where
 import Final hiding (main)
 import Tool
 import ArbitraryFinal

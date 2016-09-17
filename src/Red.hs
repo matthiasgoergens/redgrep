@@ -6,7 +6,7 @@ module Red where
 -- import Data.Foldable hiding (fold, concatMap, foldr, elem, foldl, mapM_)
 import Prelude hiding (sequence, mapM)
 import Data.List (sort)
-import Data.Monoid
+import Data.Monoid hiding (Alt)
 import Data.Maybe (isJust)
 import qualified Data.Set as Set
 import Data.Ord
