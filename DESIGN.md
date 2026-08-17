@@ -205,7 +205,11 @@ Documented hazards (do not rediscover):
   cache keys); benchmark write-ups must label the core-memo column as
   "complexity class fixed, constants pending phase 3". Measured 2026-08-17:
   core-memo is 1.1–2.4× slower than plain re-derivation at current state
-  sizes — the cache pays for nothing yet.
+  sizes — the cache pays for nothing yet. With machine nodes it becomes
+  pathological: on div7, core runs at ~12 ns/char while core-memo is ~1000×
+  slower, because every cache probe compares the embedded transition table
+  structurally (logs/2026-08-17/bench/div7-machine.*). Interning is not an
+  optimisation, it is a prerequisite for the memo to exist.
 - **Intersection is PSPACE-complete in general**: adversarial nested ∩/¬ can
   force genuinely exponential state sets; no canonicalisation fixes this.
   Accepted limitation; strongest argument for the phase-4 planner.
