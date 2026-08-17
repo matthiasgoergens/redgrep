@@ -242,6 +242,16 @@ char-indexed table for ASCII is the known fix, phase-3 backlog). Matcher
 choice is workload-dependent — a first, tiny instance of the phase-4
 planner question.
 
+Phase-3 step 3 (dense ASCII transition tables,
+logs/2026-08-17/bench/phase3-dense.*): compiled states precompute a
+UArray over chars 0..127 (class-list scan kept above ASCII). Closes the
+compiled-vs-lazy gap entirely: astar 270 µs (was 1.0 ms, now equal to
+matchDfa and 2.2x ahead of regex-tdfa), ping-search 713 µs, flapping
+874 µs, div7 676 µs — the fastest engine we have on div7 (6.8 ns/char),
+and many-short-strings 271 µs, within 2.5x of regex-tdfa from 30x behind
+at per-call construction. matchCompiled is now the default
+recommendation for reused patterns; matchDfa remains for one-shot.
+
 Two memory bugs found and fixed in this step (both under the standing
 guard: tests now run inside `systemd-run --user --scope -p MemoryMax=6G`
 plus `+RTS -M4g`):

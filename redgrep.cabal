@@ -18,6 +18,7 @@ library
   exposed-modules:     Redgrep.Core, Redgrep.Oracle
                      , ArbitraryFinal, DDup, Final, Red, Tool, Types, Util
   build-depends:       base >= 4.7 && < 5, containers >= 0.5
+                     , array
                      , QuickCheck >= 2, GenericPretty >= 1
   default-language:    Haskell2010
 

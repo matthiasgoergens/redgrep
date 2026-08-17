@@ -44,6 +44,8 @@ module Redgrep.Core
     , children
     ) where
 
+import Data.Array.Unboxed (UArray, listArray)
+import qualified Data.Array.Unboxed as UA
 import Data.Char (intToDigit)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IntMap
@@ -428,7 +430,8 @@ repChar (Neg s) = head [c | c <- [minBound ..], not (Set.member c s)]
 -- (intersection can be genuinely exponential; see DESIGN.md).
 data Compiled = Compiled
     { compNull :: !(IntMap Bool)
-    , compTrans :: !(IntMap [(Cls, Int)])
+    , compTrans :: !(IntMap [(Cls, Int)])  -- authoritative; used above ASCII
+    , compDense :: !(IntMap (UArray Int Int))  -- chars 0..127, precomputed
     , compStart :: !Int
     }
 
@@ -440,8 +443,13 @@ compile cap r0 = go (Map.singleton r0 0) IntMap.empty [(r0, 0)]
             Compiled
                 { compNull = IntMap.fromList [(i, nullable r) | (r, i) <- Map.toList ids]
                 , compTrans = trans
+                , compDense = IntMap.map dense trans
                 , compStart = 0
                 }
+      where
+        dense row =
+            listArray (0, 127) [pick (toEnum k) row | k <- [0 .. 127 :: Int]]
+        pick c row = head [j | (cls, j) <- row, inCls c cls]
     go ids trans ((r, i) : queue)
         | Map.size ids > cap = Nothing
         | otherwise =
@@ -462,11 +470,14 @@ matchCompiled :: Compiled -> String -> Bool
 matchCompiled comp = go (compStart comp)
   where
     go i [] = compNull comp IntMap.! i
-    go i (c : cs) =
-        case [j | (cls, j) <- compTrans comp IntMap.! i, inCls c cls] of
-            (j : _) -> go j cs
-            [] -> False  -- unreachable: classes partition the alphabet
-    -- the partition covers every character, so the fallback never fires
+    go i (c : cs)
+        | k < 128 = go ((compDense comp IntMap.! i) UA.! k) cs
+        | otherwise =
+            case [j | (cls, j) <- compTrans comp IntMap.! i, inCls c cls] of
+                (j : _) -> go j cs
+                [] -> False  -- unreachable: classes partition the alphabet
+      where
+        k = fromEnum c
 
 -- | Right quotient by a string: @rightQuotient u r@ matches @s@ iff @r@
 -- matches @s ++ u@.
