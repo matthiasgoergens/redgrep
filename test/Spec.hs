@@ -227,7 +227,7 @@ prop_plan_contains = withMaxSuccess 400 $
         forAll (resize 12 (listOf (elements "abc"))) $ \s ->
             let r = C.seqL [C.rep_ C.dot, C.str lit, C.rep_ C.dot]
             in case P.plan 500 r of
-                Just p@(P.Contains _) ->
+                Just p@(P.Contains _ _) ->
                     P.runPlan p s == C.match r s
                         && P.runPlan p s == (lit `isInfixOf` s)
                 _ -> False
@@ -241,6 +241,25 @@ prop_plan_agrees :: SmallRE -> Property
 prop_plan_agrees (SmallRE r) = case P.plan 500 r of
     Nothing -> label "state cap hit" True
     Just p -> forAllStrings 4 $ \s -> P.runPlan p s == C.match r s
+
+-- Regressions for the two DeepSeek findings (2026-08-17), verbatim
+-- counterexamples: Char truncation in runPlan, and the Neg-full class.
+prop_plan_unicode :: Property
+prop_plan_unicode = once $
+    let r = C.seqL [C.rep_ C.dot, C.str "\955", C.rep_ C.dot]
+        Just p = P.plan 500 r
+        r2 = C.altL [C.chr '\955', C.chr '\956']
+        Just p2 = P.plan 500 r2
+    in P.runPlan p "\187" === C.match r "\187"
+        .&&. P.runPlan p2 "\955" === C.match r2 "\955"
+
+prop_neg_full_class :: Property
+prop_neg_full_class = once $
+    let full = C.Neg (Set.fromDistinctAscList [minBound .. maxBound :: Char])
+    in (C.sym full === C.Nil)
+        .&&. property (case C.compile 10 (C.sym full) of
+                Just _ -> True
+                Nothing -> False)
 
 -- Rule 2: the required-literal analysis is sound — every match of r
 -- really does contain the claimed literal.

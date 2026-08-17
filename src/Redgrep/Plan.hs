@@ -32,10 +32,20 @@ import qualified Data.Set as Set
 
 import Redgrep.Core
 
+-- | Literals are kept as 'String' (full Char semantics) with a cached
+-- packed form that exists only when the literal is Latin-1-representable.
+-- DeepSeek review 2026-08-17: the previous ByteString-only representation
+-- truncated Chars at plan time, making 'runPlan' disagree with the engine
+-- on non-Latin-1 input (measured: .*λ.* claimed to match "»").
 data Plan
-    = Contains BC.ByteString
-    | Prefiltered BC.ByteString Compiled
+    = Contains String (Maybe BC.ByteString)
+    | Prefiltered String (Maybe BC.ByteString) Compiled
     | Automaton Compiled
+
+packable :: String -> Maybe BC.ByteString
+packable lit
+    | all (< '\256') lit = Just (BC.pack lit)
+    | otherwise = Nothing
 
 -- | @Just lit@ iff the regex is canonically @.* lit .*@ for a nonempty
 -- literal.
@@ -112,18 +122,24 @@ requiredLiteral r = case filter (not . null) (fReqs (facts r)) of
 -- literal exists, then plain DFA (with the given state cap).
 plan :: Int -> RE -> Maybe Plan
 plan cap r = case containsShape r of
-    Just lit -> Just (Contains (BC.pack lit))
+    Just lit -> Just (Contains lit (packable lit))
     Nothing -> do
         comp <- compile cap r
         pure $ case requiredLiteral r of
-            Just lit -> Prefiltered (BC.pack lit) comp
+            Just lit -> Prefiltered lit (packable lit) comp
             Nothing -> Automaton comp
 
+-- | Full Char semantics: agrees with 'Redgrep.Core.match' on every String.
 runPlan :: Plan -> String -> Bool
-runPlan p s = runPlanBS p (BC.pack s)
+runPlan (Contains lit _) s = lit `isInfixOf` s
+runPlan (Prefiltered lit _ comp) s = lit `isInfixOf` s && matchCompiled comp s
+runPlan (Automaton comp) s = matchCompiled comp s
 
+-- | Byte semantics (each byte is the Char with that code).  A literal that
+-- is not Latin-1-representable cannot occur in any byte string, so those
+-- plans reject outright.
 runPlanBS :: Plan -> BC.ByteString -> Bool
-runPlanBS (Contains lit) s = lit `BC.isInfixOf` s
-runPlanBS (Prefiltered lit comp) s =
-    lit `BC.isInfixOf` s && matchCompiledBS s comp
+runPlanBS (Contains _ mlit) s = maybe False (`BC.isInfixOf` s) mlit
+runPlanBS (Prefiltered _ mlit comp) s =
+    maybe False (\lit -> lit `BC.isInfixOf` s && matchCompiledBS s comp) mlit
 runPlanBS (Automaton comp) s = matchCompiledBS s comp

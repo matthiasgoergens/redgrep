@@ -67,6 +67,26 @@ inCls :: Char -> Cls -> Bool
 inCls c (Pos s) = Set.member c s
 inCls c (Neg s) = not (Set.member c s)
 
+charCount :: Int
+charCount = fromEnum (maxBound :: Char) + 1
+
+-- | Total emptiness test: @Neg s@ is empty exactly when s holds every Char
+-- (DeepSeek review 2026-08-17: the old @Neg _ -> False@ let a semantically
+-- empty class through 'sym', and 'compile' then crashed in 'repChar').
+clsEmpty :: Cls -> Bool
+clsEmpty (Pos s) = Set.null s
+clsEmpty (Neg s) = Set.size s == charCount
+
+clsFull :: Cls -> Bool
+clsFull (Pos s) = Set.size s == charCount
+clsFull (Neg s) = Set.null s
+
+-- | Canonical representative: the full class is always @Neg empty@ (dot).
+normCls :: Cls -> Cls
+normCls c
+    | clsFull c = Neg Set.empty
+    | otherwise = c
+
 clsUnion :: Cls -> Cls -> Cls
 clsUnion (Pos a) (Pos b) = Pos (Set.union a b)
 clsUnion (Neg a) (Neg b) = Neg (Set.intersection a b)
@@ -169,8 +189,9 @@ top :: RE
 top = Not Nil
 
 sym :: Cls -> RE
-sym (Pos s) | Set.null s = Nil
-sym cls = Sym cls
+sym cls
+    | clsEmpty cls = Nil
+    | otherwise = Sym (normCls cls)
 
 chr :: Char -> RE
 chr = sym . Pos . Set.singleton
@@ -376,8 +397,7 @@ complementCls (Pos s) = Neg s
 complementCls (Neg s) = Pos s
 
 emptyCls :: Cls -> Bool
-emptyCls (Pos s) = Set.null s
-emptyCls (Neg _) = False
+emptyCls = clsEmpty
 
 -- | Pairwise refinement of two partitions.  Deduplicated: without this the
 -- list length multiplies per refinement step and nested terms explode
