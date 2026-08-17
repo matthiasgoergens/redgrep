@@ -115,6 +115,38 @@ Base-rate note (2026-08-17): timings recorded on this machine, GHC 9.10.3,
 a function so the AST keeps decidable equality and ordering (the whole point
 of phase 1). Characters absent from the map map to themselves.
 
+### Finite state machines as primitives (added 2026-08-17, from Div7)
+
+Motivation: matthiasgoergens/Div7 expresses "decimal number divisible by 7"
+by building the 7-state residue automaton and then *state-eliminating* it
+into a regex — which fills a file and is unreadable. Under derivatives the
+machine is native: `Machine Fsm Int` (a DFA as plain data plus its current
+state) is a leaf whose derivative is a table lookup, `d_c (Machine f q) =
+Machine f (δ(q,c))`, and whose nullability is acceptance. Everything else
+composes for free through the algebra: Boolean combinations of machines are
+lazy product constructions performed by the derivative engine, quotients are
+derivative chains, invHom wraps cleanly. `divisibleBy 7` is one line, its
+derivative closure is the automaton itself (~9 states, property-tested), and
+`cut2 (divisibleBy 7) (contains "42")` just works.
+
+Decisions and their reasons:
+- Transitions are total by convention: missing (state, char) falls back to a
+  per-state else-entry, missing else-entry falls back to the implicit dead
+  state `-1`, and the smart constructor maps the dead state to `Nil` so the
+  ordinary Nil-absorption laws apply.
+- `rev` on a machine node subset-constructs the reversed automaton (start =
+  accepting set, accept = subsets containing the original state, transitions
+  = preimages; untabulated characters behave uniformly so one reversed
+  else-transition covers them). Worst case 2^|Q|; machine nodes are expected
+  small. This keeps `rev` total on the whole algebra.
+- Phase-2 evidence for machine nodes (to be settled with phase 2): they are
+  recognizer primitives, like a generalised `Sym` — success evidence is the
+  consumed substring, failure evidence the rejecting state and position. No
+  interior parse structure, by design.
+- The planner connection: machine nodes are also the *output* format — the
+  phase-4 planner compiles (fragments of) regexes into exactly this
+  constructor.
+
 These operations are for fun and are secondary: the priority is making the
 original feature set (extended algebra + evidence) correct and fast.
 

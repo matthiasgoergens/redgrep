@@ -8,9 +8,10 @@ module Redgrep.Oracle
     ( member
     ) where
 
+import Data.List (foldl')
 import qualified Data.Set as Set
 
-import Redgrep.Core (RE(..), applyHom, inCls)
+import Redgrep.Core (RE(..), applyHom, fsmAccept, inCls, stepFsm)
 
 member :: RE -> String -> Bool
 member re s = case re of
@@ -25,6 +26,7 @@ member re s = case re of
     Rep r -> null s || any (\(a, b) -> member r a && member re b) (splits1 s)
     Not r -> not (member r s)
     InvHom m r -> member r (concatMap (applyHom m) s)
+    Machine f q -> foldl' (stepFsm f) q s `Set.member` fsmAccept f
     Eps -> null s
     Nil -> False
   where

@@ -125,6 +125,16 @@ main =
                    ]
             )
         , bgroup
+            "div7"
+            [ bgroup
+                (show n)
+                [ bench "core" $ nf (C.match (C.divisibleBy 7)) inp
+                , bench "core-memo" $ nf (C.matchMemo (C.divisibleBy 7)) inp
+                ]
+            | n <- [1000, 10000, 100000]
+            , let inp = take n (cycle "0123456789")
+            ]
+        , bgroup
             "evil-aqn-an"
             [ bgroup
                 (show n)

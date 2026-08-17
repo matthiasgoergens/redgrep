@@ -11,6 +11,7 @@ module Main (main) where
 
 import Control.Monad (replicateM, unless)
 import Data.Either (isRight)
+import Data.List (isInfixOf)
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import System.Exit (exitFailure)
@@ -175,19 +176,19 @@ prop_seq_assoc (SmallRE x) (SmallRE y) (SmallRE z) =
 -- small.  The cap is generous — a failure here is a genuine blowup, not
 -- noise.  Distribution is collected so drift shows up in the test output.
 
-reachableStates :: Int -> C.RE -> Maybe Int
-reachableStates cap r0 = go (Set.singleton r0) [r0]
+reachableStates :: String -> Int -> C.RE -> Maybe Int
+reachableStates probe cap r0 = go (Set.singleton r0) [r0]
   where
     go seen [] = Just (Set.size seen)
     go seen (r : frontier)
         | Set.size seen > cap = Nothing
         | otherwise =
-            let next = [r' | c <- "abcz", let r' = C.deriv c r, not (r' `Set.member` seen)]
+            let next = [r' | c <- probe, let r' = C.deriv c r, not (r' `Set.member` seen)]
                 seen' = foldr Set.insert seen next
             in go seen' (Set.toList (Set.fromList next) ++ frontier)
 
 prop_state_space_bounded :: SmallRE -> Property
-prop_state_space_bounded (SmallRE r) = case reachableStates 300 r of
+prop_state_space_bounded (SmallRE r) = case reachableStates "abcz" 300 r of
     Nothing -> counterexample ("state blowup: >300 states for " ++ show r) False
     Just k -> collect (bucket k) True
   where
@@ -214,6 +215,55 @@ prop_kth_from_last = withMaxSuccess 300 $
                     == (length s >= k + 1 && s !! (length s - (k + 1)) == 'a')
 
 -- ---------------------------------------------------------------------------
+-- Machine nodes: Div7 without the state elimination
+-- (github.com/matthiasgoergens/Div7 obtains a multi-kilobyte regex for this
+-- language by eliminating states from the same 7-state automaton).  Checked
+-- against direct arithmetic, composed with the syntactic algebra, and
+-- reversed through the powerset construction.
+
+digitString :: Gen String
+digitString = do
+    len <- choose (0, 7)
+    vectorOf len (elements "0123456789")
+
+prop_divisibility :: Property
+prop_divisibility = withMaxSuccess 400 $
+    forAll (elements [2, 3, 7, 10]) $ \k ->
+        forAll digitString $ \s ->
+            C.match (C.divisibleBy k) s
+                == (not (null s) && (read s :: Integer) `mod` fromIntegral k == 0)
+
+prop_machine_composes :: Property
+prop_machine_composes = withMaxSuccess 400 $
+    forAll digitString $ \s ->
+        C.match (C.cut2 (C.divisibleBy 7) contains42) s
+            == (not (null s)
+                    && (read s :: Integer) `mod` 7 == 0
+                    && "42" `isInfixOf` s)
+  where
+    contains42 = C.seqL [C.rep_ C.dot, C.str "42", C.rep_ C.dot]
+
+prop_machine_rev :: Property
+prop_machine_rev = withMaxSuccess 400 $
+    forAll digitString $ \s ->
+        C.match (C.rev (C.divisibleBy 7)) s == C.match (C.divisibleBy 7) (reverse s)
+
+prop_machine_quotient :: Property
+prop_machine_quotient = withMaxSuccess 400 $
+    forAll digitString $ \u ->
+        forAll digitString $ \s ->
+            C.match (C.quotient u (C.divisibleBy 7)) s
+                == C.match (C.divisibleBy 7) (u ++ s)
+
+-- The whole point: the derivative closure of divisibleBy 7 is the automaton
+-- itself (start, 7 residues, Nil), not a syntactic explosion.
+prop_machine_states :: Property
+prop_machine_states =
+    property $ case reachableStates "0123456789z" 50 (C.divisibleBy 7) of
+        Just k -> k <= 12
+        Nothing -> False
+
+-- ---------------------------------------------------------------------------
 -- Differential tests against the 2016 engines (translatable fragment only).
 -- Disagreements here are findings about the old engines; the oracle above
 -- arbitrates which side is wrong.
@@ -230,6 +280,7 @@ toRf = \case
     C.Rep x -> F.Rep' (toRf x)
     C.Not x -> F.Not' (toRf x)
     C.InvHom _ _ -> error "toRf: InvHom not expressible in 2016 engines"
+    C.Machine _ _ -> error "toRf: Machine not expressible in 2016 engines"
     C.Eps -> F.Eps'
     C.Nil -> F.Nil'
 
@@ -252,6 +303,7 @@ toRed = \case
     C.Rep x -> unit (Red.Rep (toRed x))
     C.Not x -> Red.Not (toRed x)
     C.InvHom _ _ -> error "toRed: InvHom not expressible in 2016 engines"
+    C.Machine _ _ -> error "toRed: Machine not expressible in 2016 engines"
     C.Eps -> Red.Eps ()
     C.Nil -> Red.Nil
   where

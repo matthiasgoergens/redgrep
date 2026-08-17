@@ -15,6 +15,12 @@ module Redgrep.Core
     , sym, chr, dot, top
     , altL, alt2, cutL, cut2, seq2, seqL, rep_, not_, opt
     , str
+      -- * Finite state machines as primitives
+    , Fsm(..)
+    , machineAt
+    , stepFsm
+    , modBase
+    , divisibleBy
       -- * The engine
     , nullable
     , deriv
@@ -31,6 +37,7 @@ module Redgrep.Core
     , children
     ) where
 
+import Data.Char (intToDigit)
 import Data.List (foldl', partition)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -80,9 +87,68 @@ data RE
     | Rep RE
     | Not RE
     | InvHom (Map Char String) RE
+    | Machine Fsm Int  -- ^ a DFA and its current state; see 'machineAt'
     | Eps
     | Nil
     deriving (Eq, Ord, Show)
+
+-- | A deterministic finite automaton over 'Int' states, as plain data so
+-- 'RE' keeps decidable equality.  Transitions are total by convention:
+-- a (state, char) pair absent from 'fsmTrans' falls back to that state's
+-- 'fsmElse' entry, and an absent 'fsmElse' entry falls back to the implicit
+-- dead state @-1@ (non-accepting, absorbing).  A 'Machine' node's language
+-- is the set of strings leading from its current state to an accepting one.
+--
+-- Rationale (see also matthiasgoergens\/Div7): languages like
+-- \"divisible by 7\" have tiny automata but enormous regexes — Div7 obtains
+-- one by state elimination and it fills a file.  Under derivatives a machine
+-- node is native: the derivative IS the table transition, and the
+-- surrounding algebra (Boolean operations, seq, rep, quotients, invHom)
+-- composes with it for free.
+data Fsm = Fsm
+    { fsmTrans :: Map (Int, Char) Int
+    , fsmElse :: Map Int Int
+    , fsmAccept :: Set Int
+    }
+    deriving (Eq, Ord, Show)
+
+stepFsm :: Fsm -> Int -> Char -> Int
+stepFsm f q c =
+    Map.findWithDefault (Map.findWithDefault (-1) q (fsmElse f)) (q, c) (fsmTrans f)
+
+-- | The smart constructor for machine nodes: the dead state is 'Nil'.
+machineAt :: Fsm -> Int -> RE
+machineAt f q
+    | q < 0 = Nil
+    | otherwise = Machine f q
+
+-- | @modBase b k r@: nonempty digit strings in base @b@ (2–16, digits
+-- @0..b-1@ as characters via 'intToDigit') whose value is congruent to @r@
+-- modulo @k@.  Leading zeros are allowed.  State @k@ is the start state
+-- (\"no digits read yet\"), states @0..k-1@ are residues.
+modBase :: Int -> Int -> Int -> RE
+modBase b k r
+    | b < 2 || b > 16 = error "modBase: base out of range 2..16"
+    | k < 1 || r < 0 || r >= k = error "modBase: bad modulus or residue"
+    | otherwise = machineAt fsm k
+  where
+    fsm =
+        Fsm
+            { fsmTrans =
+                Map.fromList $
+                    [((k, intToDigit d), d `mod` k) | d <- [0 .. b - 1]]
+                        ++ [ ((q, intToDigit d), (q * b + d) `mod` k)
+                           | q <- [0 .. k - 1]
+                           , d <- [0 .. b - 1]
+                           ]
+            , fsmElse = Map.empty
+            , fsmAccept = Set.singleton r
+            }
+
+-- | Decimal divisibility: @divisibleBy 7@ is Div7 without the state
+-- elimination.
+divisibleBy :: Int -> RE
+divisibleBy k = modBase 10 k 0
 
 -- | @¬∅@: the universal language @Σ*@, the unit of 'cutL'.
 top :: RE
@@ -195,6 +261,7 @@ nullable = \case
     Rep _ -> True
     Not r -> not (nullable r)
     InvHom _ r -> nullable r  -- h "" == ""
+    Machine f q -> Set.member q (fsmAccept f)
     Eps -> True
     Nil -> False
 
@@ -214,6 +281,7 @@ deriv c = \case
     Rep r -> seq2 (deriv c r) (rep_ r)
     Not r -> not_ (deriv c r)
     InvHom m r -> invHom m (quotient (applyHom m c) r)
+    Machine f q -> machineAt f (stepFsm f q c)
     Eps -> Nil
     Nil -> Nil
 
@@ -258,8 +326,61 @@ rev = \case
     Rep r -> rep_ (rev r)
     Not r -> not_ (rev r)
     InvHom m r -> invHom (Map.map reverse m) (rev r)
+    Machine f q -> revMachine f q
     Eps -> Eps
     Nil -> Nil
+
+-- | Reversal of a machine node: subset-construct the reversed automaton.
+-- Start set = accepting states; a subset accepts iff it contains the
+-- original current state; transitions are preimages.  Characters the
+-- machine never tabulates behave uniformly (they all take state @p@ to its
+-- 'fsmElse' target), so one reversed else-transition covers them all.
+-- Worst case 2^|Q| subsets — machine nodes are expected to be small.
+revMachine :: Fsm -> Int -> RE
+revMachine f q0
+    | Set.null start = Nil
+    | otherwise = machineAt reversed (idOf start)
+  where
+    start = fsmAccept f
+    sigma = Set.toList (Set.fromList [c | (_, c) <- Map.keys (fsmTrans f)])
+    states =
+        Set.toList $
+            Set.unions
+                [ Set.fromList (concat [[p, t] | ((p, _), t) <- Map.toList (fsmTrans f)])
+                , Set.fromList (concat [[p, t] | (p, t) <- Map.toList (fsmElse f)])
+                , fsmAccept f
+                , Set.singleton q0
+                ]
+    pre s c = Set.fromList [p | p <- states, stepFsm f p c `Set.member` s]
+    preElse s =
+        Set.fromList
+            [p | p <- states, Map.findWithDefault (-1) p (fsmElse f) `Set.member` s]
+
+    -- BFS over reachable subsets, numbering them.
+    explore seen [] = seen
+    explore seen (s : rest)
+        | s `Map.member` seen = explore seen rest
+        | otherwise =
+            explore
+                (Map.insert s (Map.size seen) seen)
+                (rest ++ [t | t <- preElse s : [pre s c | c <- sigma], not (Set.null t)])
+    numbering = explore Map.empty [start]
+    idOf s = Map.findWithDefault (-1) s numbering
+    reversed =
+        Fsm
+            { fsmTrans =
+                Map.fromList
+                    [ ((i, c), idOf (pre s c))
+                    | (s, i) <- Map.toList numbering
+                    , c <- sigma
+                    ]
+            , fsmElse =
+                Map.fromList
+                    [(i, idOf (preElse s)) | (s, i) <- Map.toList numbering]
+            , fsmAccept =
+                Set.fromList
+                    [i | (s, i) <- Map.toList numbering, q0 `Set.member` s]
+            }
 
 -- | Inverse homomorphism: @invHom h r@ matches @s@ iff @r@ matches
 -- @concatMap h s@.  Characters absent from the map map to themselves, so
@@ -288,4 +409,5 @@ children = \case
     Rep r -> [r]
     Not r -> [r]
     InvHom _ r -> [r]
+    Machine _ _ -> []
     _ -> []
