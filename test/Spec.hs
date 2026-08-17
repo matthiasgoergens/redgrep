@@ -126,6 +126,18 @@ genShortString :: Int -> Gen String
 genShortString k =
     Gen.list (Range.between (0, fromIntegral k :: Word)) genChar
 
+-- Long strings over an alphabet that exercises Neg classes and unicode;
+-- checked engine-vs-engine (linear each), not against the exponential
+-- oracle.
+genLongString :: Gen String
+genLongString =
+    Gen.list
+        (Range.between (0, 60 :: Word))
+        (Gen.frequency
+            [ (8, Gen.elem ('a' :| "bc"))
+            , (1, Gen.elem ('z' :| [lambda, '\187']))
+            ])
+
 genDigits :: Gen String
 genDigits =
     Gen.list (Range.between (0, 7 :: Word)) (Gen.elem ('0' :| "123456789"))
@@ -163,6 +175,35 @@ prop_bs_matcher_agrees = do
         Just comp ->
             sweepLatin 4 $ \s ->
                 C.matchCompiledBS (BC.pack s) comp == C.matchCompiled comp s
+
+-- Long-string agreement: every engine against naive `match`, whose
+-- algorithm (fold deriv, then nullable) is the one PROVED correct for the
+-- core algebra by lean/Correctness.lean (matchRE_correct).  The oracle
+-- arbitrates short strings; the proven algorithm arbitrates long ones —
+-- length is no longer capped by the oracle's exponential cost.
+prop_engines_agree_long :: Property ()
+prop_engines_agree_long = do
+    r <- gen genRE
+    s <- gen genLongString
+    let reference = C.match r s
+    eqP ("matchDfa on " ++ show s) (C.matchDfa r s) reference
+    eqP ("matchMemo on " ++ show s) (C.matchMemo r s) reference
+    case C.compile 500 r of
+        Nothing -> label "compile" ["state cap hit"]
+        Just comp ->
+            eqP ("matchCompiled on " ++ show s) (C.matchCompiled comp s) reference
+    case P.plan 500 r of
+        Nothing -> label "plan" ["state cap hit"]
+        Just p -> eqP ("plan on " ++ show s) (P.runPlan p s) reference
+
+-- Oracle spot-check at medium length: one random string per case reaches
+-- past the exhaustive sweep without paying the oracle's exponential cost
+-- on every string.
+prop_oracle_random_medium :: Property ()
+prop_oracle_random_medium = do
+    r <- gen genRE
+    s <- gen (genShortString 7)
+    eqP ("oracle on " ++ show s) (C.match r s) (O.member r s)
 
 prop_nullable :: Property ()
 prop_nullable = do
@@ -472,6 +513,8 @@ main =
                 , testProperty "nullable decides empty string" prop_nullable
                 , testProperty "derivative is left quotient" prop_deriv_is_quotient
                 , testProperty "derivative classes sound" prop_classes_sound
+                , testProperty "engines agree on long strings" prop_engines_agree_long
+                , testProperty "oracle spot-check, medium length" prop_oracle_random_medium
                 ]
             , testGroup
                 "laws"
