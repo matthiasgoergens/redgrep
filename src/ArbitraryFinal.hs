@@ -23,7 +23,7 @@ import Prelude hiding (seq, not)
 import qualified Prelude as P
 
 import Final
-import Test.QuickCheck
+import Test.QuickCheck hiding (shrink1, shrink2)
 import Data.Bifunctor
 
 import Final hiding (main)
@@ -44,7 +44,7 @@ import Data.Function (on)
 import Data.Ord
 import Control.Arrow ((***),(&&&))
 
-import Test.QuickCheck
+import Test.QuickCheck hiding (shrink1, shrink2)
 import Test.QuickCheck.Function
 import Test.QuickCheck.All
 

@@ -620,9 +620,10 @@ omega = Set $ Left mempty
 fromList :: Ord a => [a] -> Set a
 fromList = Set . Right . Set.fromList
 -- TODO: Functor instance?  Possible exactly iff we have a Functor instance for Set.Set
+instance Ord a => Semigroup (Set a) where
+    (<>) = union
 instance Ord a => Monoid (Set a) where
     mempty = Set $ Right mempty
-    mappend = union
 
 -- empty :: Set a
 -- empty = Right empty
