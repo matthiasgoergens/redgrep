@@ -151,6 +151,19 @@ Decisions and their reasons:
 These operations are for fun and are secondary: the priority is making the
 original feature set (extended algebra + evidence) correct and fast.
 
+## The Lean twin is verified (2026-08-17)
+
+lean/ contains the executable twin (Core: RE/nullable/deriv/matchRE;
+Semantics: Mathlib Language denotation), and ALL its correctness
+theorems are now proved and locally verified (Aristotle project
+4385f9c0; lake build clean, zero sorry, every theorem on
+propext/Classical.choice/Quot.sound only): nullable_correct,
+lang_deriv (lang (deriv c r) = deriv1 c (lang r)), deriv_correct, and
+matchRE_correct — the executable matcher agrees with the denotation on
+every input. The eight language-level laws served as the lemma library,
+as designed. v2 targets: InvHom and Machine constructors in the twin,
+then the phase-2 evidence types as an indexed family.
+
 ## The chase (phase 4 started early, 2026-08-17)
 
 Matthias reframed the Lean-ceiling list (SIMD prefilters, byte-level IO)
