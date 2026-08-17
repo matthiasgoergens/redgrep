@@ -19,6 +19,7 @@ import Test.QuickCheck
 
 import qualified Redgrep.Core as C
 import qualified Redgrep.Oracle as O
+import qualified Redgrep.Plan as P
 
 -- 2016 engines, kept as differential references until parity (DESIGN.md).
 import qualified ArbitraryFinal as AF
@@ -215,6 +216,30 @@ prop_state_space_bounded (SmallRE r) = case reachableStates "abcz" 300 r of
     Just k -> collect (bucket k) True
   where
     bucket k = show (10 * (k `div` 10)) ++ "-" ++ show (10 * (k `div` 10) + 9) ++ " states"
+
+-- ---------------------------------------------------------------------------
+-- Planner rule 1: .* lit .* is substring containment.
+
+prop_plan_contains :: Property
+prop_plan_contains = withMaxSuccess 400 $
+    forAll litGen $ \lit ->
+        forAll (resize 12 (listOf (elements "abc"))) $ \s ->
+            let r = C.seqL [C.rep_ C.dot, C.str lit, C.rep_ C.dot]
+            in case P.plan 500 r of
+                Just p@(P.Contains _) ->
+                    P.runPlan p s == C.match r s
+                        && P.runPlan p s == (lit `isInfixOf` s)
+                _ -> False
+  where
+    litGen = do
+        n <- choose (1, 4)
+        vectorOf n (elements "abc")
+
+-- Any plan whatsoever must agree with the engine.
+prop_plan_agrees :: SmallRE -> Property
+prop_plan_agrees (SmallRE r) = case P.plan 500 r of
+    Nothing -> label "state cap hit" True
+    Just p -> forAllStrings 4 $ \s -> P.runPlan p s == C.match r s
 
 -- ---------------------------------------------------------------------------
 -- Targeted regression family (design review 2.1): "(a|b)* a (a|b)^k" — the

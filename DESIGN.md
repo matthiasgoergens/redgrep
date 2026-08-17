@@ -150,6 +150,25 @@ Decisions and their reasons:
 These operations are for fun and are secondary: the priority is making the
 original feature set (extended algebra + evidence) correct and fast.
 
+## The chase (phase 4 started early, 2026-08-17)
+
+Matthias reframed the Lean-ceiling list (SIMD prefilters, byte-level IO)
+as the target list. Rule 1 of the query planner is in
+(logs/2026-08-17/bench/phase4-planner-rule1.*): `Redgrep.Plan`
+structurally recognises canonical `.* lit .*` and dispatches to
+bytestring's memchr-backed substring search instead of any automaton.
+ping-search at 100k: planned 106 µs vs regex-tdfa 502 µs — 4.7x FASTER
+than the engine that had led this workload all day, and 17x faster than
+our own compiled DFA. Soundness by construction (fires only on the exact
+canonical shape) plus properties tying it to the engine and to
+isInfixOf.
+
+Next rules, in payoff order: required-factor analysis as a *prefilter*
+for general patterns (reject-fast on missing literal, then DFA);
+byte-level input (ByteString end-to-end) for all matchers; multi-literal
+prefilters (Teddy-style) via FFI later; the same memchr trick transfers
+to the Lean twin via @[extern].
+
 ## Review outcomes (2026-08-17, two adversarial passes + Matthias)
 
 Adopted immediately (in the phase-1 commit series):

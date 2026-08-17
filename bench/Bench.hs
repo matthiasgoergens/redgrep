@@ -10,7 +10,9 @@ import Data.Maybe (fromJust, isJust)
 import qualified Text.Regex.Applicative as RA
 import Text.Regex.TDFA ((=~))
 
+import qualified Data.ByteString.Char8 as BC
 import qualified Redgrep.Core as C
+import qualified Redgrep.Plan as P
 
 -- 2016 engines (small inputs only; both are super-linear).
 import qualified DDup
@@ -70,6 +72,11 @@ tdfaEvil n s = s =~ pat
   where
     pat = "^" ++ concat (replicate n "a?") ++ replicate n 'a' ++ "$" :: String
 
+pingPlan :: P.Plan
+pingPlan = case P.plan 2000 pingC of
+    Just p -> p
+    Nothing -> error "pingPlan: cap"
+
 -- Compiled once, reused across all inputs (the persistent-matcher story).
 pingCompiled, flappingCompiled, astarCompiled, div7Compiled :: C.Compiled
 pingCompiled = fromJust (C.compile 2000 pingC)
@@ -110,11 +117,13 @@ main =
                 , bench "core-memo" $ nf (C.matchMemo pingC) inp
                 , bench "core-dfa" $ nf (C.matchDfa pingC) inp
                 , bench "core-compiled" $ nf (C.matchCompiled pingCompiled) inp
+                , bench "core-planned" $ nf (P.runPlanBS pingPlan) inpBS
                 , bench "regex-applicative" $ nf raPing inp
                 , bench "regex-tdfa" $ nf tdfaPing inp
                 ]
             | n <- [1000, 10000, 100000]
             , let inp = pingInput n
+            , let inpBS = BC.pack inp
             ]
         , bgroup
             "flapping"
