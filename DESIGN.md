@@ -266,8 +266,14 @@ aristotle/redgrep-laws-881d1d9a.tar.gz. Statement-level diff done: all
 defs and all 8 statements identical to what was submitted; additions are
 only `open` scoping (Computability for ∗; Classical for deriv1_mul's if).
 Three laws (deriv1_inter, deriv1_compl, deriv1_invHom) hold by rfl.
-Local lake build + #print axioms audit in progress; laws count as
-verified only when that passes.
+VERIFIED locally 2026-08-17: lake build succeeds (Lean 4.28.0, Mathlib
+per the returned manifest), zero sorry, and the #print axioms audit
+(logs/2026-08-17/aristotle-axioms-audit.log) shows every theorem resting
+only on propext / Classical.choice / Quot.sound — with deriv1_invHom
+depending on NO axioms at all (definitionally true). The proved file is
+kept at aristotle/Statements-proved.lean. The engine's per-constructor
+rules for ∩, ¬, ·, *, invHom, rev, and both quotients now implement
+machine-checked laws rather than tested ones.
 
 Phase-1 baseline measurements (logs/2026-08-17/bench/phase1-e317b6d.*,
 GHC 9.10.3, this machine):
