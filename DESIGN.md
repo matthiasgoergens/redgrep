@@ -256,11 +256,18 @@ plus `+RTS -M4g`):
   the tree.
 
 Aristotle status: all 8 language-level laws reported proved (standard
-axioms only, two benign elaboration adjustments). NOT yet locally
-verified: the download endpoint returns an empty archive (upstream CLI
-bug of the do-not-trust-exit-codes kind); asked the project to print the
-final file inline instead. Until lake build passes locally, the laws
-count as claimed, not proven.
+axioms only, two benign elaboration adjustments). The earlier "download
+endpoint broken" diagnosis was WRONG — user error, twice over:
+`--destination` names the archive FILE (a tar.gz), not a directory to
+populate, and the "empty directory" was a misread `find` on what was in
+fact the downloaded archive. Correct usage:
+`aristotle download <id> --destination <name>.tar.gz`. Archive kept at
+aristotle/redgrep-laws-881d1d9a.tar.gz. Statement-level diff done: all
+defs and all 8 statements identical to what was submitted; additions are
+only `open` scoping (Computability for ∗; Classical for deriv1_mul's if).
+Three laws (deriv1_inter, deriv1_compl, deriv1_invHom) hold by rfl.
+Local lake build + #print axioms audit in progress; laws count as
+verified only when that passes.
 
 Phase-1 baseline measurements (logs/2026-08-17/bench/phase1-e317b6d.*,
 GHC 9.10.3, this machine):
