@@ -46,6 +46,9 @@ skill; full workflow in `~/.claude/skills/aristotle/SKILL.md`. Essentials:
   decompose, and leave the main theorem its own `sorry`.
 - **Do not trust its exit codes** (observed exiting 0 on hard errors).
   Success = confirmed project ID or downloaded artefact, nothing less.
+- `download --destination` is the archive **file** path (a gzip'd tar),
+  not a directory to populate. Confirm with `file`/`tar --list`, then
+  extract with `tar --extract --gzip --file=<path> --directory=<dir>`.
 - A returned proof counts only after local re-checking at declaration
   level: `lake build`, statement is the one you meant, no `sorry`, no
   added axioms (`#print axioms <theorem>`).
