@@ -72,10 +72,13 @@ tdfaEvil n s = s =~ pat
   where
     pat = "^" ++ concat (replicate n "a?") ++ replicate n 'a' ++ "$" :: String
 
-pingPlan :: P.Plan
+pingPlan, flappingPlan :: P.Plan
 pingPlan = case P.plan 2000 pingC of
     Just p -> p
     Nothing -> error "pingPlan: cap"
+flappingPlan = case P.plan 2000 flappingC of
+    Just p -> p
+    Nothing -> error "flappingPlan: cap"
 
 -- Compiled once, reused across all inputs (the persistent-matcher story).
 pingCompiled, flappingCompiled, astarCompiled, div7Compiled :: C.Compiled
@@ -133,10 +136,19 @@ main =
                   , bench "core-memo" $ nf (C.matchMemo flappingC) inp
                   , bench "core-dfa" $ nf (C.matchDfa flappingC) inp
                   , bench "core-compiled" $ nf (C.matchCompiled flappingCompiled) inp
+                  , bench "core-planned" $ nf (P.runPlanBS flappingPlan) (BC.pack inp)
                   ]
               | n <- [1000, 10000, 100000]
               , let inp = pingInput n
               ]
+                ++ [ bgroup
+                       (show n ++ "-nohit")
+                       [ bench "core-compiled" $ nf (C.matchCompiled flappingCompiled) inp
+                       , bench "core-planned" $ nf (P.runPlanBS flappingPlan) (BC.pack inp)
+                       ]
+                   | n <- [100000]
+                   , let inp = replicate n 'e'
+                   ]
                 ++ [ bgroup
                        (show n ++ "-2016")
                        [ bench "red2016" $ nf (Red.match Red.flapping) inp

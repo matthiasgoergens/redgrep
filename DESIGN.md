@@ -163,11 +163,22 @@ our own compiled DFA. Soundness by construction (fires only on the exact
 canonical shape) plus properties tying it to the engine and to
 isInfixOf.
 
-Next rules, in payoff order: required-factor analysis as a *prefilter*
-for general patterns (reject-fast on missing literal, then DFA);
-byte-level input (ByteString end-to-end) for all matchers; multi-literal
-prefilters (Teddy-style) via FFI later; the same memchr trick transfers
-to the Lean twin via @[extern].
+Rule 2 (same day, logs/2026-08-17/bench/phase4-prefilter.*):
+`requiredLiteral` — a sound necessary-factor analysis (per-operator:
+any Cut conjunct's factor binds; only factors common to all Alt branches
+survive; adjacent exact-literal Seq children concatenate; Rep/Not/
+InvHom/Machine contribute nothing) — and `matchCompiledBS`, a byte-level
+walker over dense 0..255 tables. Plans without a containment shape but
+with a required literal become Prefiltered: memchr reject, then DFA.
+Measured on flapping (∩ + ¬, required literal "ping" found through the
+intersection): no-hit input 74 µs vs 377 µs unfiltered (5.1x) at 100k;
+hit-input overhead ~6%. Soundness property: every claimed literal is
+contained in every match (100 cases, oracle-checked strings); flapping's
+literal asserted exactly.
+
+Next rules, in payoff order: multi-literal prefilters (Teddy-style) via
+FFI later; String-side engines byte-native; the same memchr trick
+transfers to the Lean twin via @[extern].
 
 ## Review outcomes (2026-08-17, two adversarial passes + Matthias)
 

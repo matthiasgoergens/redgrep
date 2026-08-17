@@ -20,6 +20,7 @@ import Test.QuickCheck
 import qualified Redgrep.Core as C
 import qualified Redgrep.Oracle as O
 import qualified Redgrep.Plan as P
+import qualified Data.ByteString.Char8 as BC
 
 -- 2016 engines, kept as differential references until parity (DESIGN.md).
 import qualified ArbitraryFinal as AF
@@ -240,6 +241,34 @@ prop_plan_agrees :: SmallRE -> Property
 prop_plan_agrees (SmallRE r) = case P.plan 500 r of
     Nothing -> label "state cap hit" True
     Just p -> forAllStrings 4 $ \s -> P.runPlan p s == C.match r s
+
+-- Rule 2: the required-literal analysis is sound — every match of r
+-- really does contain the claimed literal.
+prop_required_literal_sound :: SmallRE -> Property
+prop_required_literal_sound (SmallRE r) = case P.requiredLiteral r of
+    Nothing -> label "no literal" True
+    Just lit ->
+        label "literal found" $
+            forAllStrings 4 $ \s -> not (C.match r s) || (lit `isInfixOf` s)
+
+-- The flapping pattern (∩ + ¬) yields "ping" as its required literal,
+-- so the extended algebra gets the memchr prefilter too.
+prop_flapping_required :: Property
+prop_flapping_required =
+    once $
+        P.requiredLiteral
+            (C.cut2
+                (C.seqL [C.rep_ C.dot, C.str "ping", C.rep_ C.dot])
+                (C.not_ (C.seqL [C.rep_ C.dot, C.str "flapping", C.rep_ C.dot])))
+            === Just "ping"
+
+-- Byte-level walker agrees with the Char-level one on ASCII.
+prop_bs_matcher_agrees :: SmallRE -> Property
+prop_bs_matcher_agrees (SmallRE r) = case C.compile 500 r of
+    Nothing -> label "state cap hit" True
+    Just comp ->
+        forAllStrings 4 $ \s ->
+            C.matchCompiledBS (BC.pack s) comp == C.matchCompiled comp s
 
 -- ---------------------------------------------------------------------------
 -- Targeted regression family (design review 2.1): "(a|b)* a (a|b)^k" — the

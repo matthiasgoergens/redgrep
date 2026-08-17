@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 
 -- | Phase 1 of the rework (see DESIGN.md): the value-free core.
@@ -33,6 +34,7 @@ module Redgrep.Core
     , Compiled
     , compile
     , matchCompiled
+    , matchCompiledBS
       -- * Closure operations
     , quotient
     , rightQuotient
@@ -45,6 +47,7 @@ module Redgrep.Core
     ) where
 
 import Data.Array.Unboxed (UArray, listArray)
+import qualified Data.ByteString as B
 import qualified Data.Array.Unboxed as UA
 import Data.Char (intToDigit)
 import Data.IntMap.Strict (IntMap)
@@ -431,7 +434,7 @@ repChar (Neg s) = head [c | c <- [minBound ..], not (Set.member c s)]
 data Compiled = Compiled
     { compNull :: !(IntMap Bool)
     , compTrans :: !(IntMap [(Cls, Int)])  -- authoritative; used above ASCII
-    , compDense :: !(IntMap (UArray Int Int))  -- chars 0..127, precomputed
+    , compDense :: !(IntMap (UArray Int Int))  -- chars 0..255, precomputed
     , compStart :: !Int
     }
 
@@ -448,7 +451,7 @@ compile cap r0 = go (Map.singleton r0 0) IntMap.empty [(r0, 0)]
                 }
       where
         dense row =
-            listArray (0, 127) [pick (toEnum k) row | k <- [0 .. 127 :: Int]]
+            listArray (0, 255) [pick (toEnum k) row | k <- [0 .. 255 :: Int]]
         pick c row = head [j | (cls, j) <- row, inCls c cls]
     go ids trans ((r, i) : queue)
         | Map.size ids > cap = Nothing
@@ -466,12 +469,27 @@ compile cap r0 = go (Map.singleton r0 0) IntMap.empty [(r0, 0)]
                 ((ids1, new1), row) = foldl' step ((ids, []), []) outs
             in go ids1 (IntMap.insert i row trans) (queue ++ reverse new1)
 
+-- | Byte-level matcher: walks a strict ByteString through the dense
+-- tables only (every byte is < 256).  Byte semantics: each byte is the
+-- character with that code (latin-1 view); the String matchers remain the
+-- reference for full Char semantics.
+matchCompiledBS :: B.ByteString -> Compiled -> Bool
+matchCompiledBS bs comp = go (compStart comp) 0
+  where
+    n = B.length bs
+    go !i !pos
+        | pos >= n = compNull comp IntMap.! i
+        | otherwise =
+            go
+                ((compDense comp IntMap.! i) UA.! fromIntegral (B.index bs pos))
+                (pos + 1)
+
 matchCompiled :: Compiled -> String -> Bool
 matchCompiled comp = go (compStart comp)
   where
     go i [] = compNull comp IntMap.! i
     go i (c : cs)
-        | k < 128 = go ((compDense comp IntMap.! i) UA.! k) cs
+        | k < 256 = go ((compDense comp IntMap.! i) UA.! k) cs
         | otherwise =
             case [j | (cls, j) <- compTrans comp IntMap.! i, inCls c cls] of
                 (j : _) -> go j cs
