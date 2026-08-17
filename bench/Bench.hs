@@ -5,7 +5,6 @@ module Main (main) where
 
 import Control.Applicative (optional)
 import Criterion.Main
-import Data.Either (isRight)
 import Data.Maybe (fromJust, isJust)
 import qualified Text.Regex.Applicative as RA
 import Text.Regex.TDFA ((=~))
@@ -13,11 +12,6 @@ import Text.Regex.TDFA ((=~))
 import qualified Data.ByteString.Char8 as BC
 import qualified Redgrep.Core as C
 import qualified Redgrep.Plan as P
-
--- 2016 engines (small inputs only; both are super-linear).
-import qualified DDup
-import qualified Final as F
-import qualified Red
 
 -- ---------------------------------------------------------------------------
 -- Patterns
@@ -46,16 +40,6 @@ flappingC =
     C.cut2
         (C.seqL [C.rep_ C.dot, C.str "ping", C.rep_ C.dot])
         (C.not_ (C.seqL [C.rep_ C.dot, C.str "flapping", C.rep_ C.dot]))
-
-ddupFlapping :: String -> Bool
-ddupFlapping s = isRight (DDup.dd s re)
-  where
-    re =
-        F.cut
-            (i `F.seq` F.string "ping")
-            (F.not (i `F.seq` F.string "flapping"))
-            `F.seq` i
-    i = F.rep (F.sym Nothing)
 
 -- (a?)^n a^n on a^n: the classic backtracking killer.
 evilC :: Int -> C.RE
@@ -148,14 +132,6 @@ main =
                        ]
                    | n <- [100000]
                    , let inp = replicate n 'e'
-                   ]
-                ++ [ bgroup
-                       (show n ++ "-2016")
-                       [ bench "red2016" $ nf (Red.match Red.flapping) inp
-                       , bench "ddup2016" $ nf ddupFlapping inp
-                       ]
-                   | n <- [50, 200]
-                   , let inp = pingInput n
                    ]
             )
         , bgroup

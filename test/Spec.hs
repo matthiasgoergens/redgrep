@@ -22,12 +22,6 @@ import qualified Redgrep.Oracle as O
 import qualified Redgrep.Plan as P
 import qualified Data.ByteString.Char8 as BC
 
--- 2016 engines, kept as differential references until parity (DESIGN.md).
-import qualified ArbitraryFinal as AF
-import qualified DDup
-import qualified Final as F
-import qualified Red
-
 -- Three letters, not two: with only {a,b}, character-class canonicalisation
 -- (e.g. [ab]∪[bc] vs [abc]) is structurally untestable (design review 2.2).
 alphabet :: String
@@ -36,6 +30,24 @@ alphabet = "abc"
 -- | All strings over the alphabet up to the given length.
 allStrings :: Int -> [String]
 allStrings k = concatMap (\n -> replicateM n alphabet) [0 .. k]
+
+-- Alphabet-boundary material (DeepSeek findings 2026-08-17: all three
+-- confirmed bugs involved non-Latin-1 characters or near-full classes,
+-- which the {a,b,c} distribution could never reach).
+lambda :: Char
+lambda = '\955'
+
+boundaryStrings :: [String]
+boundaryStrings =
+    ["\955", "a\955", "\955a", "\187", "\256", "\955\955", "a\955b"]
+
+-- Built once and shared (CAFs); Set operations against small sets stay
+-- cheap because containers' union/difference are O(m log(n/m)).
+allChars :: Set.Set Char
+allChars = Set.fromDistinctAscList [minBound .. maxBound]
+
+nearFullSet :: Set.Set Char
+nearFullSet = allChars Set.\\ Set.fromList "a\955"
 
 -- | Generator producing only canonical terms (built via smart constructors)
 -- over positive classes and dot — the fragment the 2016 engines can also
@@ -47,10 +59,20 @@ instance Arbitrary SmallRE where
     arbitrary = SmallRE <$> sized (gen . min 5)
       where
         leaf = frequency
-            [ (3, C.sym . C.Pos . Set.fromList <$> sublistOf alphabet)
-            , (1, pure C.dot)
-            , (1, pure C.Eps)
-            , (1, pure C.Nil)
+            [ (6, C.sym . C.Pos . Set.fromList <$> sublistOf alphabet)
+            , (2, pure C.dot)
+            , (2, pure C.Eps)
+            , (2, pure C.Nil)
+              -- boundary classes: unicode members, negated classes,
+              -- near-full and exactly-full sets
+            , (1, C.sym . C.Pos . Set.fromList . (lambda :) <$> sublistOf alphabet)
+            , (1, C.sym . C.Neg . Set.fromList <$> sublistOf ('\955' : alphabet))
+            , (1, elements
+                    [ C.sym (C.Pos nearFullSet)
+                    , C.sym (C.Neg nearFullSet)
+                    , C.sym (C.Pos allChars)
+                    , C.sym (C.Neg allChars)
+                    ])
             ]
         gen n
             | n <= 0 = leaf
@@ -72,9 +94,11 @@ instance Arbitrary SmallRE where
 
 -- Exhaustive length 4 over three letters: 121 strings, comparable coverage
 -- budget to the previous 63 over two letters, plus class-merge visibility.
+-- Exhaustive over {a,b,c} plus the fixed boundary strings, so unicode
+-- class members are exercised positively, not just as non-matches.
 forAllStrings :: Int -> (String -> Bool) -> Property
 forAllStrings k p =
-    conjoin [counterexample (show s) (p s) | s <- allStrings k]
+    conjoin [counterexample (show s) (p s) | s <- allStrings k ++ boundaryStrings]
 
 -- The main theorem: the engine agrees with the oracle.
 prop_match_vs_oracle :: SmallRE -> Property
@@ -212,7 +236,7 @@ reachableStates probe cap r0 = go (Set.singleton r0) [r0]
             in go seen' (Set.toList (Set.fromList next) ++ frontier)
 
 prop_state_space_bounded :: SmallRE -> Property
-prop_state_space_bounded (SmallRE r) = case reachableStates "abcz" 300 r of
+prop_state_space_bounded (SmallRE r) = case reachableStates "abcz\955" 300 r of
     Nothing -> counterexample ("state blowup: >300 states for " ++ show r) False
     Just k -> collect (bucket k) True
   where
@@ -301,8 +325,11 @@ prop_bs_matcher_agrees :: SmallRE -> Property
 prop_bs_matcher_agrees (SmallRE r) = case C.compile 500 r of
     Nothing -> label "state cap hit" True
     Just comp ->
-        forAllStrings 4 $ \s ->
-            C.matchCompiledBS (BC.pack s) comp == C.matchCompiled comp s
+        conjoin
+            [ counterexample (show s) $
+                C.matchCompiledBS (BC.pack s) comp == C.matchCompiled comp s
+            | s <- allStrings 4  -- latin-1 only: byte semantics by design
+            ]
 
 -- ---------------------------------------------------------------------------
 -- Targeted regression family (design review 2.1): "(a|b)* a (a|b)^k" — the
@@ -395,59 +422,6 @@ prop_machine_states =
     property $ case reachableStates "0123456789z" 50 (C.divisibleBy 7) of
         Just k -> k <= 12
         Nothing -> False
-
--- ---------------------------------------------------------------------------
--- Differential tests against the 2016 engines (translatable fragment only).
--- Disagreements here are findings about the old engines; the oracle above
--- arbitrates which side is wrong.
-
-toRf :: C.RE -> F.Rf
-toRf = \case
-    C.Sym (C.Pos s) -> F.Sym' (Just (Set.toList s))
-    C.Sym (C.Neg s)
-        | Set.null s -> F.Sym' Nothing
-        | otherwise -> error "toRf: negated class not expressible in 2016 engines"
-    C.Alt s -> foldr1 F.Alt' (map toRf (Set.toList s))
-    C.Cut s -> foldr1 F.Cut' (map toRf (Set.toList s))
-    C.Seq l -> foldr1 F.Seq' (map toRf l)
-    C.Rep x -> F.Rep' (toRf x)
-    C.Not x -> F.Not' (toRf x)
-    C.InvHom _ _ -> error "toRf: InvHom not expressible in 2016 engines"
-    C.Machine _ _ -> error "toRf: Machine not expressible in 2016 engines"
-    C.Eps -> F.Eps'
-    C.Nil -> F.Nil'
-
-prop_ddup2016_agrees :: SmallRE -> Property
-prop_ddup2016_agrees (SmallRE r) =
-    C.size r <= 12 ==> case AF.toShield (toRf r) of
-        AF.Shield re ->
-            forAllStrings 4 $ \s ->
-                isRight (DDup.dd s (F.run re)) == C.match r s
-
-toRed :: C.RE -> Red.Re Char ()
-toRed = \case
-    C.Sym (C.Pos s) -> unit (Red.Sym (Just (Set.toList s)))
-    C.Sym (C.Neg s)
-        | Set.null s -> unit (Red.Sym Nothing)
-        | otherwise -> error "toRed: negated class not expressible in 2016 engines"
-    C.Alt s -> foldr1 (\a b -> unit (Red.Alt a b)) (map toRed (Set.toList s))
-    C.Cut s -> foldr1 (\a b -> unit (Red.Cut a b)) (map toRed (Set.toList s))
-    C.Seq l -> foldr1 (\a b -> unit (Red.Seq a b)) (map toRed l)
-    C.Rep x -> unit (Red.Rep (toRed x))
-    C.Not x -> Red.Not (toRed x)
-    C.InvHom _ _ -> error "toRed: InvHom not expressible in 2016 engines"
-    C.Machine _ _ -> error "toRed: Machine not expressible in 2016 engines"
-    C.Eps -> Red.Eps ()
-    C.Nil -> Red.Nil
-  where
-    unit :: Red.Re Char x -> Red.Re Char ()
-    unit = Red.FMap (const ())
-
-prop_red2016_agrees :: SmallRE -> Property
-prop_red2016_agrees (SmallRE r) =
-    C.size r <= 10 ==> withMaxSuccess 60 $
-        forAllStrings 3 $ \s ->
-            Red.match (toRed r) s == C.match r s
 
 -- ---------------------------------------------------------------------------
 

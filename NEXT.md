@@ -56,14 +56,17 @@ logs/2026-08-17/ with commit + command.
 
 ## Open items
 
-- Cross-model review NOT run: codex out of credits until Aug 20 ~11:30
-  (verified: usage-limit error). Session's diff (32359e3..39bdb49) is
-  unreviewed by a second family; consider /deepseek (own public code, OK
-  per policy) or codex after the 20th.
-- Blog draft needs Matthias's read before any publication (his rule).
+- DeepSeek review DONE (3 findings, all measured, fixed, regression-
+  tested; transcript in logs/2026-08-17/). Codex still out of credits
+  until Aug 20 — optional third family pass then.
+- Blog draft needs Matthias's read before any publication (his rule);
+  note pushing the repo makes the draft file public.
 - falsify migration for tests (in lts-24.55; deferred while suite churns).
-- 2016 modules still in src/ as differential references; delete at parity.
+- 2016 modules deleted from tree (git history keeps them); differential
+  props retired with them.
 - many-short-strings: still 2.5x behind regex-tdfa (109 µs vs 271 µs).
+- Aristotle project 4385f9c0 (Lean twin correctness sorries) pending;
+  verify locally on return (lake build, no sorry, #print axioms).
 
 ## Unverified beliefs (do not treat as fact)
 

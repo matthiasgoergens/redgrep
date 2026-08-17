@@ -37,14 +37,12 @@ the two ends.
 
 ## Repository layout decision
 
-`master` should show what works plus the write-up; the 2016 exploration is
-preserved by git history, not by the working tree. The old modules
-(`Red`, `Final`, `DDup`, `Types`, `ArbitraryFinal`, `Tool`, `Util`) stay in
-place for now **only** as differential-test references and benchmark
-baselines, and will simply be deleted once the new engine reaches feature
-parity (evidence included) — git history keeps the fossil record. The
-write-up stays in `notes-prior-art/`; publishing it anywhere is a separate,
-explicit step.
+`master` shows what works plus the write-up; the 2016 exploration lives in
+git history (removed 2026-08-17 on Matthias's instruction, after the
+differential tests had confirmed the old engines agreed with the new core
+on their shared fragment — that agreement is recorded in the test history
+and logs). The write-up stays in `notes-prior-art/`; publishing it as a
+blog post is a separate, explicit step.
 
 ## Correctness: oracle + properties
 
