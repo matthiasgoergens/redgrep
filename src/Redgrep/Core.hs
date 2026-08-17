@@ -438,7 +438,12 @@ classes = \case
                     Set.union
                     [(t, Set.singleton c) | ((q', c), t) <- Map.toList (fsmTrans f), q' == q]
             tabulated = Set.unions (Map.elems byTarget)
-        in [Pos s | s <- Map.elems byTarget] ++ [Neg tabulated]
+        in -- Filter through the total emptiness test: a state tabulating
+           -- every Char makes @Neg tabulated@ semantically empty (DeepSeek
+           -- round 2 — same bug class as the sym fix, one emitter further).
+           filter
+               (not . emptyCls)
+               ([Pos s | s <- Map.elems byTarget] ++ [Neg tabulated])
     Eps -> everything
     Nil -> everything
 

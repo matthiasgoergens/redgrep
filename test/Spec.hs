@@ -261,6 +261,21 @@ prop_neg_full_class = once $
                 Just _ -> True
                 Nothing -> False)
 
+-- DeepSeek round 2: a machine state tabulating every Char must not emit
+-- an empty derivative class (compile used to crash in repChar).
+prop_machine_full_tabulation :: Property
+prop_machine_full_tabulation = once $
+    let fsm =
+            C.Fsm
+                { C.fsmTrans =
+                    Map.fromList [((0, c), 0) | c <- [minBound .. maxBound :: Char]]
+                , C.fsmElse = Map.empty
+                , C.fsmAccept = Set.singleton 0
+                }
+    in property $ case C.compile 1 (C.machineAt fsm 0) of
+        Just _ -> True
+        Nothing -> False
+
 -- Rule 2: the required-literal analysis is sound — every match of r
 -- really does contain the claimed literal.
 prop_required_literal_sound :: SmallRE -> Property
