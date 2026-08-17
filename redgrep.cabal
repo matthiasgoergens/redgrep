@@ -15,7 +15,8 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     ArbitraryFinal, DDup, Final, Red, Tool, Types, Util
+  exposed-modules:     Redgrep.Core, Redgrep.Oracle
+                     , ArbitraryFinal, DDup, Final, Red, Tool, Types, Util
   build-depends:       base >= 4.7 && < 5, containers >= 0.5
                      , QuickCheck >= 2, GenericPretty >= 1
   default-language:    Haskell2010
@@ -34,7 +35,21 @@ test-suite redgrep-test
   main-is:             Spec.hs
   build-depends:       base
                      , redgrep
+                     , QuickCheck
+                     , containers
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+
+benchmark redgrep-bench
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      bench
+  main-is:             Bench.hs
+  build-depends:       base
+                     , redgrep
+                     , criterion
+                     , regex-applicative
+                     , regex-tdfa
+  ghc-options:         -O2
   default-language:    Haskell2010
 
 source-repository head
