@@ -262,10 +262,16 @@ rev = \case
     Nil -> Nil
 
 -- | Inverse homomorphism: @invHom h r@ matches @s@ iff @r@ matches
--- @concatMap h s@.  Characters absent from the map map to themselves.
+-- @concatMap h s@.  Characters absent from the map map to themselves, so
+-- identity entries are dropped and a fully-identity map collapses to the
+-- bare regex (design review 1.3: canonical form, not just boundedness).
 invHom :: Map Char String -> RE -> RE
 invHom _ Nil = Nil
-invHom m r = InvHom m r
+invHom m r
+    | Map.null m' = r
+    | otherwise = InvHom m' r
+  where
+    m' = Map.filterWithKey (\c s -> s /= [c]) m
 
 applyHom :: Map Char String -> Char -> String
 applyHom m c = Map.findWithDefault [c] c m

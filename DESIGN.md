@@ -117,3 +117,76 @@ of phase 1). Characters absent from the map map to themselves.
 
 These operations are for fun and are secondary: the priority is making the
 original feature set (extended algebra + evidence) correct and fast.
+
+## Review outcomes (2026-08-17, two adversarial passes + Matthias)
+
+Adopted immediately (in the phase-1 commit series):
+- **Kleene-algebra/De Morgan law suite** as properties (star unfold,
+  distributivity, De Morgan pairs, absorption, structural seq associativity)
+  — the smart constructors are the crux and three ad hoc laws undersampled
+  them.
+- **State-space measurement**: derivative-closure size per generated regex,
+  capped and distribution-collected — the one test that would have caught
+  the 2016 failure mode.
+- **Three-letter alphabet** for tests: with {a,b} alone, class-merge
+  canonicalisation ([ab]∪[bc] vs [abc]) is structurally untestable.
+- **kth-from-last regression family** `(a|b)* a (a|b)^k`, k ≤ 8, checked
+  against its direct specification at lengths past the exhaustive sweep:
+  distinguishing-string length grows with state count (2^(k+1) states), so
+  bounded-length sweeps have a provable blind spot exactly there.
+- **invHom canonicalisation**: identity entries dropped, identity maps
+  collapse.
+
+Accepted with timing:
+- **Character classes as intervals/predicates instead of Set Char** — a
+  representation decision, not an optimisation; scheduled together with the
+  phase-3 alphabet-partitioning work that touches the same code. Set Char is
+  acceptable only while the test alphabet is tiny.
+- **Property-testing library**: QuickCheck is the weakest of the current
+  options (Matthias: "QuickCheck is pretty bad", and he ports Hypothesis to
+  Rust/OCaml). falsify-0.2.0 (Hypothesis-style internal shrinking) is in
+  lts-24.55; migrate the suite once it stabilises rather than churning now.
+  SmallCheck-style exhaustive term enumeration at small depths is worth
+  adding at the same time (random terms undersample degenerate shapes).
+- **Proof-assistant route** (Matthias is open to extraction): Tan–Urban's
+  Isabelle formalisation covers POSIX lexing on the positive fragment only —
+  the evidence bifunctor with ∩/¬ has no existing formalisation, so proving
+  it would be new work, most naturally attempted once the phase-2 types have
+  settled (Lean 4 or Agda; the survey's Dec-refutation formalisations are
+  the starting points). Until then: oracle + differential + laws.
+- **Mixed benchmark corpus** (Matthias): keep the synthetic/adversarial
+  workloads AND add realistic text + patterns (log file, IP/timestamp/email
+  shapes); also add allocation stats (+RTS -T is already visible to
+  criterion), a large-alternation workload, workloads for invHom/rev/right
+  quotient, and a nested-intersection stressor (see PSPACE note below).
+
+Documented hazards (do not rediscover):
+- **`rep_ (Rep x) = Rep x` is unsound for phase-2 evidence.** Language-equal
+  but parse-structure-different; nested-star regrouping is run-time-
+  dependent (the POSIX hard case), so no static rectification exists. The
+  evidence layer must either keep its own unflattened structure keyed to the
+  canonical core via the erase discipline (Tan–Urban — the intended reading
+  of "folded once"), or adopt and document a policy making nested-star
+  groupings interchangeable. Same warning for any future De-Morgan-style
+  rewrite between cut and not/alt/not: evidence shapes differ.
+- **Memo-hit cost is O(|state|) until interning lands** (structural Ord on
+  cache keys); benchmark write-ups must label the core-memo column as
+  "complexity class fixed, constants pending phase 3". Measured 2026-08-17:
+  core-memo is 1.1–2.4× slower than plain re-derivation at current state
+  sizes — the cache pays for nothing yet.
+- **Intersection is PSPACE-complete in general**: adversarial nested ∩/¬ can
+  force genuinely exponential state sets; no canonicalisation fixes this.
+  Accepted limitation; strongest argument for the phase-4 planner.
+- **Keil–Thiemann Δ/∇** (positive/negative derivative pair flipping at ¬):
+  implement in phase 2 as an independent boolean-level "does a refutation
+  exist" check to cross-validate the mkeps-dual before trusting its shape.
+
+Phase-1 baseline measurements (logs/2026-08-17/bench/phase1-e317b6d.*,
+GHC 9.10.3, this machine):
+- Input-length scaling is linear everywhere tested (flapping at 100k chars:
+  ~74 ms; the 2016 engines could not leave 3-digit inputs).
+- vs regex-tdfa: ~1.6× slower on a*, ~100× slower on literal search
+  (tdfa prefilters; planner territory), catastrophically slower on
+  (a?)^n a^n as pattern size grows (big Alt-of-suffixes states rebuilt per
+  char — the Antimirov/marks argument, phase 3).
+- vs regex-applicative: faster on a* at all sizes; slower on literal search.

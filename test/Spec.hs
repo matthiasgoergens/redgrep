@@ -25,8 +25,10 @@ import qualified DDup
 import qualified Final as F
 import qualified Red
 
+-- Three letters, not two: with only {a,b}, character-class canonicalisation
+-- (e.g. [ab]∪[bc] vs [abc]) is structurally untestable (design review 2.2).
 alphabet :: String
-alphabet = "ab"
+alphabet = "abc"
 
 -- | All strings over the alphabet up to the given length.
 allStrings :: Int -> [String]
@@ -65,6 +67,8 @@ instance Arbitrary SmallRE where
                 ++ [C.Eps | r /= C.Eps, r /= C.Nil]
                 ++ [C.Nil | r /= C.Nil]
 
+-- Exhaustive length 4 over three letters: 121 strings, comparable coverage
+-- budget to the previous 63 over two letters, plus class-merge visibility.
 forAllStrings :: Int -> (String -> Bool) -> Property
 forAllStrings k p =
     conjoin [counterexample (show s) (p s) | s <- allStrings k]
@@ -72,11 +76,11 @@ forAllStrings k p =
 -- The main theorem: the engine agrees with the oracle.
 prop_match_vs_oracle :: SmallRE -> Property
 prop_match_vs_oracle (SmallRE r) =
-    forAllStrings 5 $ \s -> C.match r s == O.member r s
+    forAllStrings 4 $ \s -> C.match r s == O.member r s
 
 prop_memo_agrees :: SmallRE -> Property
 prop_memo_agrees (SmallRE r) =
-    forAllStrings 5 $ \s -> C.matchMemo r s == C.match r s
+    forAllStrings 4 $ \s -> C.matchMemo r s == C.match r s
 
 prop_nullable :: SmallRE -> Bool
 prop_nullable (SmallRE r) = C.nullable r == O.member r ""
@@ -85,7 +89,7 @@ prop_nullable (SmallRE r) = C.nullable r == O.member r ""
 prop_deriv_is_quotient :: SmallRE -> Property
 prop_deriv_is_quotient (SmallRE r) =
     forAll (elements alphabet) $ \c ->
-        forAllStrings 4 $ \s -> O.member (C.deriv c r) s == O.member r (c : s)
+        forAllStrings 3 $ \s -> O.member (C.deriv c r) s == O.member r (c : s)
 
 -- Canonical form: these hold structurally, not just semantically.
 prop_alt_commutes :: SmallRE -> SmallRE -> Property
@@ -110,11 +114,11 @@ prop_right_quotient (SmallRE r) =
 
 prop_rev :: SmallRE -> Property
 prop_rev (SmallRE r) =
-    forAllStrings 5 $ \s -> C.match (C.rev r) s == C.match r (reverse s)
+    forAllStrings 4 $ \s -> C.match (C.rev r) s == C.match r (reverse s)
 
 prop_rev_involution :: SmallRE -> Property
 prop_rev_involution (SmallRE r) =
-    forAllStrings 5 $ \s -> C.match (C.rev (C.rev r)) s == C.match r s
+    forAllStrings 4 $ \s -> C.match (C.rev (C.rev r)) s == C.match r s
 
 -- Inverse homomorphism: sample maps exercising expansion, erasure, and
 -- swapping; both the engine's derivative rule and the oracle must agree
@@ -133,6 +137,81 @@ prop_invHom (SmallRE r) =
         , Map.fromList [('a', "b"), ('b', "a")]
         , Map.fromList [('a', "aa")]
         ]
+
+-- ---------------------------------------------------------------------------
+-- Kleene-algebra / De Morgan law suite (semantic, oracle-arbitrated where
+-- cheap, engine-vs-engine otherwise).  Adopted from design review: the smart
+-- constructors are the crux of phase 1, and three ad hoc laws undersample
+-- them.
+
+semEq :: C.RE -> C.RE -> Property
+semEq x y = forAllStrings 4 $ \s -> C.match x s == C.match y s
+
+prop_star_unfold :: SmallRE -> Property
+prop_star_unfold (SmallRE x) =
+    semEq (C.rep_ x) (C.alt2 C.Eps (C.seq2 x (C.rep_ x)))
+
+prop_seq_distributes_alt :: SmallRE -> SmallRE -> SmallRE -> Property
+prop_seq_distributes_alt (SmallRE x) (SmallRE y) (SmallRE z) =
+    semEq (C.seq2 x (C.alt2 y z)) (C.alt2 (C.seq2 x y) (C.seq2 x z))
+
+prop_de_morgan :: SmallRE -> SmallRE -> Property
+prop_de_morgan (SmallRE x) (SmallRE y) =
+    semEq (C.not_ (C.alt2 x y)) (C.cut2 (C.not_ x) (C.not_ y))
+        .&&. semEq (C.not_ (C.cut2 x y)) (C.alt2 (C.not_ x) (C.not_ y))
+
+prop_alt_absorbs_cut :: SmallRE -> SmallRE -> Property
+prop_alt_absorbs_cut (SmallRE x) (SmallRE y) =
+    semEq (C.alt2 x (C.cut2 x y)) x .&&. semEq (C.cut2 x (C.alt2 x y)) x
+
+prop_seq_assoc :: SmallRE -> SmallRE -> SmallRE -> Property
+prop_seq_assoc (SmallRE x) (SmallRE y) (SmallRE z) =
+    C.seq2 x (C.seq2 y z) === C.seq2 (C.seq2 x y) z
+
+-- ---------------------------------------------------------------------------
+-- State-space boundedness: the one measurement that would have caught the
+-- 2016 failure mode.  Explore the derivative closure over a probe alphabet
+-- ('z' probes the complement side of Neg classes); it must stay finite and
+-- small.  The cap is generous — a failure here is a genuine blowup, not
+-- noise.  Distribution is collected so drift shows up in the test output.
+
+reachableStates :: Int -> C.RE -> Maybe Int
+reachableStates cap r0 = go (Set.singleton r0) [r0]
+  where
+    go seen [] = Just (Set.size seen)
+    go seen (r : frontier)
+        | Set.size seen > cap = Nothing
+        | otherwise =
+            let next = [r' | c <- "abcz", let r' = C.deriv c r, not (r' `Set.member` seen)]
+                seen' = foldr Set.insert seen next
+            in go seen' (Set.toList (Set.fromList next) ++ frontier)
+
+prop_state_space_bounded :: SmallRE -> Property
+prop_state_space_bounded (SmallRE r) = case reachableStates 300 r of
+    Nothing -> counterexample ("state blowup: >300 states for " ++ show r) False
+    Just k -> collect (bucket k) True
+  where
+    bucket k = show (10 * (k `div` 10)) ++ "-" ++ show (10 * (k `div` 10) + 9) ++ " states"
+
+-- ---------------------------------------------------------------------------
+-- Targeted regression family (design review 2.1): "(a|b)* a (a|b)^k" — the
+-- kth-from-last-character language, whose minimal DFA has 2^(k+1) states and
+-- whose distinguishing strings are longer than the exhaustive sweep above
+-- can reach.  Checked against its direct specification, at string lengths
+-- up to 2(k+1)+2.
+
+kthFromLast :: Int -> C.RE
+kthFromLast k = C.seqL ([C.rep_ ab, C.chr 'a'] ++ replicate k ab)
+  where
+    ab = C.sym (C.Pos (Set.fromList "ab"))
+
+prop_kth_from_last :: Property
+prop_kth_from_last = withMaxSuccess 300 $
+    forAll (choose (1, 8)) $ \k ->
+        forAll (choose (0, 2 * (k + 1) + 2)) $ \len ->
+            forAll (vectorOf len (elements "ab")) $ \s ->
+                C.match (kthFromLast k) s
+                    == (length s >= k + 1 && s !! (length s - (k + 1)) == 'a')
 
 -- ---------------------------------------------------------------------------
 -- Differential tests against the 2016 engines (translatable fragment only).
