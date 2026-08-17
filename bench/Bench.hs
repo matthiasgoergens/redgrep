@@ -6,7 +6,7 @@ module Main (main) where
 import Control.Applicative (optional)
 import Criterion.Main
 import Data.Either (isRight)
-import Data.Maybe (isJust)
+import Data.Maybe (fromJust, isJust)
 import qualified Text.Regex.Applicative as RA
 import Text.Regex.TDFA ((=~))
 
@@ -70,6 +70,13 @@ tdfaEvil n s = s =~ pat
   where
     pat = "^" ++ concat (replicate n "a?") ++ replicate n 'a' ++ "$" :: String
 
+-- Compiled once, reused across all inputs (the persistent-matcher story).
+pingCompiled, flappingCompiled, astarCompiled, div7Compiled :: C.Compiled
+pingCompiled = fromJust (C.compile 2000 pingC)
+flappingCompiled = fromJust (C.compile 2000 flappingC)
+astarCompiled = fromJust (C.compile 2000 astarC)
+div7Compiled = fromJust (C.compile 2000 (C.divisibleBy 7))
+
 -- ---------------------------------------------------------------------------
 
 aInput :: Int -> String
@@ -88,6 +95,7 @@ main =
                 [ bench "core" $ nf (C.match astarC) inp
                 , bench "core-memo" $ nf (C.matchMemo astarC) inp
                 , bench "core-dfa" $ nf (C.matchDfa astarC) inp
+                , bench "core-compiled" $ nf (C.matchCompiled astarCompiled) inp
                 , bench "regex-applicative" $ nf raAstar inp
                 , bench "regex-tdfa" $ nf tdfaAstar inp
                 ]
@@ -101,6 +109,7 @@ main =
                 [ bench "core" $ nf (C.match pingC) inp
                 , bench "core-memo" $ nf (C.matchMemo pingC) inp
                 , bench "core-dfa" $ nf (C.matchDfa pingC) inp
+                , bench "core-compiled" $ nf (C.matchCompiled pingCompiled) inp
                 , bench "regex-applicative" $ nf raPing inp
                 , bench "regex-tdfa" $ nf tdfaPing inp
                 ]
@@ -114,6 +123,7 @@ main =
                   [ bench "core" $ nf (C.match flappingC) inp
                   , bench "core-memo" $ nf (C.matchMemo flappingC) inp
                   , bench "core-dfa" $ nf (C.matchDfa flappingC) inp
+                  , bench "core-compiled" $ nf (C.matchCompiled flappingCompiled) inp
                   ]
               | n <- [1000, 10000, 100000]
               , let inp = pingInput n
@@ -134,11 +144,23 @@ main =
                 [ bench "core" $ nf (C.match (C.divisibleBy 7)) inp
                 , bench "core-memo" $ nf (C.matchMemo (C.divisibleBy 7)) inp
                 , bench "core-dfa" $ nf (C.matchDfa (C.divisibleBy 7)) inp
+                , bench "core-compiled" $ nf (C.matchCompiled div7Compiled) inp
                 , bench "core-dfa-3x5x7" $
                     nf (C.matchDfa (C.cutL [C.divisibleBy 3, C.divisibleBy 5, C.divisibleBy 7])) inp
                 ]
             | n <- [1000, 10000, 100000]
             , let inp = take n (cycle "0123456789")
+            ]
+        , bgroup
+            "many-short-strings"
+            [ bgroup
+                (show k)
+                [ bench "core-dfa-per-call" $ nf (map (C.matchDfa pingC)) inps
+                , bench "core-compiled" $ nf (map (C.matchCompiled pingCompiled)) inps
+                , bench "regex-tdfa" $ nf (map tdfaPing) inps
+                ]
+            | k <- [2000]
+            , let inps = [take 20 (drop i (cycle "abc ping xyz pin g")) | i <- [0 .. k]]
             ]
         , bgroup
             "evil-aqn-an"

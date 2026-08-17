@@ -87,6 +87,24 @@ prop_dfa_agrees :: SmallRE -> Property
 prop_dfa_agrees (SmallRE r) =
     forAllStrings 4 $ \s -> C.matchDfa r s == C.match r s
 
+-- Derivative classes: deriv must be constant on each class (soundness of
+-- the partition the compiled DFA is built over).
+prop_classes_sound :: SmallRE -> Property
+prop_classes_sound (SmallRE r) =
+    conjoin
+        [ counterexample (show c) $
+            C.deriv c r == C.deriv (C.repChar (classOf c)) r
+        | c <- "abcz"
+        ]
+  where
+    classOf c = head [cls | cls <- C.classes r, C.inCls c cls]
+
+prop_compiled_agrees :: SmallRE -> Property
+prop_compiled_agrees (SmallRE r) = case C.compile 500 r of
+    Nothing -> label "state cap hit" True
+    Just comp ->
+        forAllStrings 4 $ \s -> C.matchCompiled comp s == C.match r s
+
 prop_nullable :: SmallRE -> Bool
 prop_nullable (SmallRE r) = C.nullable r == O.member r ""
 
@@ -267,6 +285,14 @@ prop_machine_product = withMaxSuccess 400 $
     forAll digitString $ \s ->
         C.match (C.cut2 (C.divisibleBy 3) (C.divisibleBy 5)) s
             == C.match (C.divisibleBy 15) s
+
+prop_compiled_div :: Property
+prop_compiled_div = withMaxSuccess 400 $
+    case C.compile 100 (C.cut2 (C.divisibleBy 3) (C.divisibleBy 5)) of
+        Nothing -> property False
+        Just comp ->
+            forAll digitString $ \s ->
+                C.matchCompiled comp s == C.match (C.divisibleBy 15) s
 
 prop_machine_product_dfa :: Property
 prop_machine_product_dfa = withMaxSuccess 400 $

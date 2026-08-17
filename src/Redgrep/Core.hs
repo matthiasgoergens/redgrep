@@ -27,6 +27,12 @@ module Redgrep.Core
     , match
     , matchMemo
     , matchDfa
+      -- * Derivative classes and compiled matchers
+    , classes
+    , repChar
+    , Compiled
+    , compile
+    , matchCompiled
       -- * Closure operations
     , quotient
     , rightQuotient
@@ -353,6 +359,114 @@ matchDfa r0 s0 =
 -- @u ++ s@.  This is just an iterated derivative.
 quotient :: String -> RE -> RE
 quotient u r = foldl' (flip deriv) r u
+
+-- ---------------------------------------------------------------------------
+-- Derivative classes (Owens–Reppy–Turon): a finite partition of the whole
+-- alphabet such that 'deriv' is constant on each class.  This is what makes
+-- an eager, persistent DFA constructible: transitions are enumerated per
+-- class, not per character.
+
+complementCls :: Cls -> Cls
+complementCls (Pos s) = Neg s
+complementCls (Neg s) = Pos s
+
+emptyCls :: Cls -> Bool
+emptyCls (Pos s) = Set.null s
+emptyCls (Neg _) = False
+
+-- | Pairwise refinement of two partitions.  Deduplicated: without this the
+-- list length multiplies per refinement step and nested terms explode
+-- exponentially in memory (observed: a test run killed at multi-GB).  The
+-- distinct classes are bounded by the atoms of the Boolean algebra the leaf
+-- classes generate, which is small.
+refine :: [Cls] -> [Cls] -> [Cls]
+refine xs ys =
+    Set.toList . Set.fromList $
+        filter (not . emptyCls) [clsIsect x y | x <- xs, y <- ys]
+
+everything :: [Cls]
+everything = [Neg Set.empty]
+
+-- | A partition of the alphabet on which @deriv · r@ is constant per class.
+classes :: RE -> [Cls]
+classes = \case
+    Sym c -> filter (not . emptyCls) [c, complementCls c]
+    Alt rs -> foldr (refine . classes) everything (Set.toList rs)
+    Cut rs -> foldr (refine . classes) everything (Set.toList rs)
+    Seq (r : rs)
+        | nullable r -> refine (classes r) (classes (seqL rs))
+        | otherwise -> classes r
+    Seq [] -> everything
+    Rep r -> classes r
+    Not r -> classes r
+    -- Domain characters behave individually (their images differ); identity
+    -- characters behave like the underlying regex, so refine against it.
+    InvHom m r ->
+        refine
+            ([Pos (Set.singleton c) | c <- Map.keys m] ++ [Neg (Map.keysSet m)])
+            (classes r)
+    -- Tabulated characters grouped by target state; everything else follows
+    -- the else-transition.
+    Machine f q ->
+        let byTarget =
+                Map.fromListWith
+                    Set.union
+                    [(t, Set.singleton c) | ((q', c), t) <- Map.toList (fsmTrans f), q' == q]
+            tabulated = Set.unions (Map.elems byTarget)
+        in [Pos s | s <- Map.elems byTarget] ++ [Neg tabulated]
+    Eps -> everything
+    Nil -> everything
+
+-- | A representative character of a nonempty class.
+repChar :: Cls -> Char
+repChar (Pos s) = Set.findMin s
+repChar (Neg s) = head [c | c <- [minBound ..], not (Set.member c s)]
+
+-- | An eagerly built DFA over derivative classes: persistent, reusable
+-- across calls, with all interning cost paid at compile time.  Returns
+-- 'Nothing' if more than the given number of states are reachable
+-- (intersection can be genuinely exponential; see DESIGN.md).
+data Compiled = Compiled
+    { compNull :: !(IntMap Bool)
+    , compTrans :: !(IntMap [(Cls, Int)])
+    , compStart :: !Int
+    }
+
+compile :: Int -> RE -> Maybe Compiled
+compile cap r0 = go (Map.singleton r0 0) IntMap.empty [(r0, 0)]
+  where
+    go ids trans [] =
+        Just
+            Compiled
+                { compNull = IntMap.fromList [(i, nullable r) | (r, i) <- Map.toList ids]
+                , compTrans = trans
+                , compStart = 0
+                }
+    go ids trans ((r, i) : queue)
+        | Map.size ids > cap = Nothing
+        | otherwise =
+            -- Thread only the NEWLY discovered states through the fold; an
+            -- earlier version threaded the whole queue and then appended it
+            -- to itself, doubling it per step (found by probe-compile.hs:
+            -- even a bare Sym looped forever on gigabytes).
+            let outs = [(cls, deriv (repChar cls) r) | cls <- classes r]
+                step ((ids', new), acc) (cls, r') = case Map.lookup r' ids' of
+                    Just j -> ((ids', new), (cls, j) : acc)
+                    Nothing ->
+                        let j = Map.size ids'
+                        in ((Map.insert r' j ids', (r', j) : new), (cls, j) : acc)
+                ((ids1, new1), row) = foldl' step ((ids, []), []) outs
+            in go ids1 (IntMap.insert i row trans) (queue ++ reverse new1)
+
+matchCompiled :: Compiled -> String -> Bool
+matchCompiled comp = go (compStart comp)
+  where
+    go i [] = compNull comp IntMap.! i
+    go i (c : cs) =
+        case [j | (cls, j) <- compTrans comp IntMap.! i, inCls c cls] of
+            (j : _) -> go j cs
+            [] -> False  -- unreachable: classes partition the alphabet
+    -- the partition covers every character, so the fallback never fires
 
 -- | Right quotient by a string: @rightQuotient u r@ matches @s@ iff @r@
 -- matches @s ++ u@.

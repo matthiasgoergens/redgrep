@@ -230,6 +230,38 @@ an id), then transitions are id-to-id lookups. At 100k input:
   caching cannot help; the cost is state *construction* (big Alt-of-suffix
   terms), which is the Antimirov/marks argument — next.
 
+Phase-3 step 2 (derivative classes + persistent compiled DFA,
+logs/2026-08-17/bench/phase3-compiled.*): `classes` computes the ORT
+alphabet partition per state; `compile cap` eagerly builds a reusable DFA
+over it (Nothing above the state cap). Measured: many-short-strings (2000
+x 20 chars) 529 µs compiled vs 16.1 ms rebuilding the lazy DFA per call —
+the 30x that motivates persistence; regex-tdfa still 4.5x ahead there
+(literal prefilter). On one long input matchDfa remains ~3x faster than
+matchCompiled (the compiled walker scans a class list per char; a dense
+char-indexed table for ASCII is the known fix, phase-3 backlog). Matcher
+choice is workload-dependent — a first, tiny instance of the phase-4
+planner question.
+
+Two memory bugs found and fixed in this step (both under the standing
+guard: tests now run inside `systemd-run --user --scope -p MemoryMax=6G`
+plus `+RTS -M4g`):
+- `refine` without dedup: class lists multiplied per leaf (2^#syms for
+  nested terms) — genuine exponential memory, killed a test run at
+  multi-GB. Fixed by dedup; distinct classes are bounded by the atoms of
+  the Boolean algebra the leaves generate.
+- `compile` threaded the whole queue through its interning fold and then
+  appended it to itself: queue doubled per step, ids never grew, the cap
+  never fired — infinite loop on any regex with a transition (a bare Sym
+  looped). Found by notes-prior-art/probe-compile.hs; the probe stays in
+  the tree.
+
+Aristotle status: all 8 language-level laws reported proved (standard
+axioms only, two benign elaboration adjustments). NOT yet locally
+verified: the download endpoint returns an empty archive (upstream CLI
+bug of the do-not-trust-exit-codes kind); asked the project to print the
+final file inline instead. Until lake build passes locally, the laws
+count as claimed, not proven.
+
 Phase-1 baseline measurements (logs/2026-08-17/bench/phase1-e317b6d.*,
 GHC 9.10.3, this machine):
 - Input-length scaling is linear everywhere tested (flapping at 100k chars:
