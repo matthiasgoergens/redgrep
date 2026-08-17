@@ -26,6 +26,7 @@ module Redgrep.Core
     , deriv
     , match
     , matchMemo
+    , matchDfa
       -- * Closure operations
     , quotient
     , rightQuotient
@@ -38,6 +39,8 @@ module Redgrep.Core
     ) where
 
 import Data.Char (intToDigit)
+import Data.IntMap.Strict (IntMap)
+import qualified Data.IntMap.Strict as IntMap
 import Data.List (foldl', partition)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -303,6 +306,48 @@ matchMemo r0 = go Map.empty r0
         Nothing ->
             let r' = deriv c r
             in go (Map.insert (r, c) r' cache) r' cs
+
+-- | Phase-3 step 1: a lazily built, interned DFA.  Each distinct derivative
+-- state pays the structural comparison ONCE (on first encounter, to obtain
+-- its id); after that, transitions are id-to-id lookups and the regex terms
+-- are never compared again.  This is what 'matchMemo' should have been: its
+-- structural cache keys made every HIT cost a full term comparison, which
+-- machine nodes turned pathological (~1000x on div7, see DESIGN.md).
+data Dfa = Dfa
+    { dfaIds :: !(Map RE Int)
+    , dfaNull :: !(IntMap Bool)
+    , dfaTerm :: !(IntMap RE)
+    , dfaDelta :: !(IntMap (Map Char Int))
+    }
+
+internState :: RE -> Dfa -> (Int, Dfa)
+internState r d = case Map.lookup r (dfaIds d) of
+    Just i -> (i, d)
+    Nothing ->
+        ( i
+        , d
+            { dfaIds = Map.insert r i (dfaIds d)
+            , dfaNull = IntMap.insert i (nullable r) (dfaNull d)
+            , dfaTerm = IntMap.insert i r (dfaTerm d)
+            , dfaDelta = IntMap.insert i Map.empty (dfaDelta d)
+            }
+        )
+  where
+    i = Map.size (dfaIds d)
+
+matchDfa :: RE -> String -> Bool
+matchDfa r0 s0 =
+    let (i0, d0) = internState r0 (Dfa Map.empty IntMap.empty IntMap.empty IntMap.empty)
+    in go d0 i0 s0
+  where
+    go d i [] = dfaNull d IntMap.! i
+    go d i (c : cs) = case Map.lookup c (dfaDelta d IntMap.! i) of
+        Just j -> go d j cs
+        Nothing ->
+            let r' = deriv c (dfaTerm d IntMap.! i)
+                (j, d') = internState r' d
+                d'' = d' {dfaDelta = IntMap.adjust (Map.insert c j) i (dfaDelta d')}
+            in go d'' j cs
 
 -- | Left quotient by a string: @quotient u r@ matches @s@ iff @r@ matches
 -- @u ++ s@.  This is just an iterated derivative.

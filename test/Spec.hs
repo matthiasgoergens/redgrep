@@ -83,6 +83,10 @@ prop_memo_agrees :: SmallRE -> Property
 prop_memo_agrees (SmallRE r) =
     forAllStrings 4 $ \s -> C.matchMemo r s == C.match r s
 
+prop_dfa_agrees :: SmallRE -> Property
+prop_dfa_agrees (SmallRE r) =
+    forAllStrings 4 $ \s -> C.matchDfa r s == C.match r s
+
 prop_nullable :: SmallRE -> Bool
 prop_nullable (SmallRE r) = C.nullable r == O.member r ""
 
@@ -254,6 +258,21 @@ prop_machine_quotient = withMaxSuccess 400 $
         forAll digitString $ \s ->
             C.match (C.quotient u (C.divisibleBy 7)) s
                 == C.match (C.divisibleBy 7) (u ++ s)
+
+-- Nothing magic about 7: intersection of divisibility machines is
+-- divisibility by the lcm (here coprime, so the product), built lazily by
+-- the derivative engine.
+prop_machine_product :: Property
+prop_machine_product = withMaxSuccess 400 $
+    forAll digitString $ \s ->
+        C.match (C.cut2 (C.divisibleBy 3) (C.divisibleBy 5)) s
+            == C.match (C.divisibleBy 15) s
+
+prop_machine_product_dfa :: Property
+prop_machine_product_dfa = withMaxSuccess 400 $
+    forAll digitString $ \s ->
+        C.matchDfa (C.cut2 (C.divisibleBy 3) (C.divisibleBy 5)) s
+            == C.match (C.divisibleBy 15) s
 
 -- The whole point: the derivative closure of divisibleBy 7 is the automaton
 -- itself (start, 7 residues, Nil), not a syntactic explosion.

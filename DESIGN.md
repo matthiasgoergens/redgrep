@@ -217,6 +217,19 @@ Documented hazards (do not rediscover):
   implement in phase 2 as an independent boolean-level "does a refutation
   exist" check to cross-validate the mkeps-dual before trusting its shape.
 
+Phase-3 step 1 (interned lazy DFA, logs/2026-08-17/bench/phase3-interned-dfa.*):
+`matchDfa` pays the structural comparison once per distinct state (to assign
+an id), then transitions are id-to-id lookups. At 100k input:
+- ping-search 595 µs (was 27.9 ms plain, 47×; regex-tdfa 293 µs — within 2×).
+- flapping (∩ + ¬) 604 µs (was 70 ms, 116×) — ~6 ns/char on the workload
+  nothing else in the comparison set can express.
+- a* 266 µs — now 2× FASTER than regex-tdfa (581 µs).
+- div7 977 µs ≈ plain core (both are table walks); the matchMemo pathology
+  (1.1 s) is gone. Lazy triple product 3×5×7 runs at 1.6 ms.
+- evil-(a?)^n·a^n unchanged: every state in that run is visited once, so
+  caching cannot help; the cost is state *construction* (big Alt-of-suffix
+  terms), which is the Antimirov/marks argument — next.
+
 Phase-1 baseline measurements (logs/2026-08-17/bench/phase1-e317b6d.*,
 GHC 9.10.3, this machine):
 - Input-length scaling is linear everywhere tested (flapping at 100k chars:

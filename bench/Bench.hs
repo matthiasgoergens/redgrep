@@ -87,6 +87,7 @@ main =
                 (show n)
                 [ bench "core" $ nf (C.match astarC) inp
                 , bench "core-memo" $ nf (C.matchMemo astarC) inp
+                , bench "core-dfa" $ nf (C.matchDfa astarC) inp
                 , bench "regex-applicative" $ nf raAstar inp
                 , bench "regex-tdfa" $ nf tdfaAstar inp
                 ]
@@ -99,6 +100,7 @@ main =
                 (show n)
                 [ bench "core" $ nf (C.match pingC) inp
                 , bench "core-memo" $ nf (C.matchMemo pingC) inp
+                , bench "core-dfa" $ nf (C.matchDfa pingC) inp
                 , bench "regex-applicative" $ nf raPing inp
                 , bench "regex-tdfa" $ nf tdfaPing inp
                 ]
@@ -111,6 +113,7 @@ main =
                   (show n)
                   [ bench "core" $ nf (C.match flappingC) inp
                   , bench "core-memo" $ nf (C.matchMemo flappingC) inp
+                  , bench "core-dfa" $ nf (C.matchDfa flappingC) inp
                   ]
               | n <- [1000, 10000, 100000]
               , let inp = pingInput n
@@ -130,6 +133,9 @@ main =
                 (show n)
                 [ bench "core" $ nf (C.match (C.divisibleBy 7)) inp
                 , bench "core-memo" $ nf (C.matchMemo (C.divisibleBy 7)) inp
+                , bench "core-dfa" $ nf (C.matchDfa (C.divisibleBy 7)) inp
+                , bench "core-dfa-3x5x7" $
+                    nf (C.matchDfa (C.cutL [C.divisibleBy 3, C.divisibleBy 5, C.divisibleBy 7])) inp
                 ]
             | n <- [1000, 10000, 100000]
             , let inp = take n (cycle "0123456789")
@@ -140,6 +146,7 @@ main =
                 (show n)
                 [ bench "core" $ nf (C.match (evilC n)) inp
                 , bench "core-memo" $ nf (C.matchMemo (evilC n)) inp
+                , bench "core-dfa" $ nf (C.matchDfa (evilC n)) inp
                 , bench "regex-applicative" $ nf (raEvil n) inp
                 , bench "regex-tdfa" $ nf (tdfaEvil n) inp
                 ]
