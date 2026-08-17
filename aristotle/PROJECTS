@@ -1,1 +1,2 @@
 881d1d9a-8d80-4618-9646-e53ae9e62939  submitted 2026-08-17  language-level laws (deriv boolean/mul/kstar, invHom, rev, right-quotient, star chunks)
+4385f9c0-3e4f-4994-9395-4a31f9cab14c  submitted 2026-08-17  Lean twin correctness: nullable_correct, deriv_correct, matchRE_correct (Correctness.lean sorries)
