@@ -1,7 +1,7 @@
 # redgrep rework: correctness, speed, and the evidence bifunctor
 
-Status: phase 1 in progress (2026-08-17). Prior-art background: `notes-prior-art/survey.md`
-and the write-up `notes-prior-art/evidence-of-absence.html`.
+Status: phase 1 in progress (2026-08-17). Prior-art background: `~/prog/paquari-notes/redgrep-evidence-of-absence/survey.md (private)`
+and the write-up `~/prog/paquari-notes/redgrep-evidence-of-absence/evidence-of-absence.html (private)`.
 
 ## Goal
 
@@ -91,7 +91,10 @@ Workloads:
   showcase; only Core and the 2016 engines can express it.
 
 Method: criterion with `--time-limit` kept low for iteration; runs saved
-under `logs/<date>/bench/` with the commit hash. Comparisons against other
+under `logs/<date>/bench/` with the commit hash — on disk only, untracked
+(history rewritten 2026-08-17 to drop logs/ and the notes; commit hashes
+quoted in docs from before that rewrite refer to the pre-rewrite
+history). Comparisons against other
 languages (grep, RE2, rust/regex, Google redgrep itself) belong in a later
 subprocess harness — in-process Haskell comparisons first.
 
@@ -290,7 +293,7 @@ plus `+RTS -M4g`):
 - `compile` threaded the whole queue through its interning fold and then
   appended it to itself: queue doubled per step, ids never grew, the cap
   never fired — infinite loop on any regex with a transition (a bare Sym
-  looped). Found by notes-prior-art/probe-compile.hs; the probe stays in
+  looped). Found by tools/probe-compile.hs; the probe stays in
   the tree.
 
 Aristotle status: all 8 language-level laws reported proved (standard

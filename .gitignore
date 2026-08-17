@@ -14,3 +14,5 @@ cabal.sandbox.config
 cabal.config
 .stack-work/
 aristotle-881d1d9a/
+logs/
+notes-prior-art/

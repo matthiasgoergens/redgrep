@@ -2,7 +2,7 @@
 
 Goal: extended regexes (∪ · * ∩ ¬) as typed combinators, matching-as-parsing
 with **typed failure evidence** (`not` swaps the bifunctor sides — no prior
-art found; survey at notes-prior-art/survey.md), correct and fast.
+art found; survey at ~/prog/paquari-notes/redgrep-evidence-of-absence/survey.md (private)), correct and fast.
 DESIGN.md is the decision log; every number below has raw logs under
 logs/2026-08-17/ with commit + command.
 
@@ -10,7 +10,7 @@ logs/2026-08-17/ with commit + command.
 
 - Stackage lts-24.55 / GHC 9.10.3 (3bee920); builds, tests, benches all run.
 - Prior-art survey + blog draft (22b22e6, 72a0af4;
-  notes-prior-art/evidence-of-absence.html — draft in Matthias's voice,
+  ~/prog/paquari-notes/redgrep-evidence-of-absence/evidence-of-absence.html (private) — draft in Matthias's voice,
   NOT reviewed by him for publication).
 - Phase 1 (e317b6d): Redgrep.Core value-free canonical AST, Brzozowski
   derivs, oracle (Redgrep.Oracle), ~30 properties incl. differential vs
@@ -31,8 +31,7 @@ logs/2026-08-17/ with commit + command.
   (logs/2026-08-17/aristotle-axioms-audit.log). Proved file:
   aristotle/Statements-proved.lean.
 - Two memory bugs fixed (77bde15): refine-without-dedup (exponential);
-  compile queue self-append (infinite loop; probe: notes-prior-art/
-  probe-compile.hs). Standing guard: run tests via
+  compile queue self-append (infinite loop; probe: tools/probe-compile.hs). Standing guard: run tests via
   `systemd-run --user --scope -p MemoryMax=6G` (+ env DBUS/XDG vars,
   see DESIGN.md) with `--test-arguments '+RTS -M4g -RTS'`.
 
@@ -73,7 +72,7 @@ logs/2026-08-17/ with commit + command.
 - "flapping" name origin: from 2016 Red.hs:663; no google/redgrep origin
   found (README grep empty), Matthias doesn't remember coining context.
 - Bille–Gørtz–Jessen (arXiv:2510.09311): whether complement yields a
-  structured witness — hedged; PDF at notes-prior-art/, unread in depth.
+  structured witness — hedged; PDF at ~/prog/paquari-notes/redgrep-evidence-of-absence/, unread in depth.
 - lean-regex capabilities: from web search only, never built/run here.
 - Benchmark absolute numbers drift ~1.5x with machine load (observed
   between runs); relative standings were stable.
