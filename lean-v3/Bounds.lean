@@ -70,15 +70,25 @@ def B : RE → Nat
 /-- Finiteness: the ACI-canonicalising engine reaches only finitely many
 states.  (For the v2 engine without smart constructors this is *false* in
 general — associativity alone regenerates unboundedly many terms — which is
-exactly why v3 exists.) -/
+exactly why v3 exists.)  Stated for arbitrary `r`: the raw initial term
+adds at most one state, so finiteness is unconditional. -/
 theorem closure_finite (r : RE) : (closure r).Finite := by
   sorry
 
-/-- The quantitative bound: the closure is no larger than `B r`.
-(`Set.ncard` is `Nat.card` of the subtype; on infinite sets it is `0`, so
-this statement is only meaningful together with `closure_finite` — kept
-split so the finiteness half can be proved and consumed first.) -/
-theorem closure_ncard_le (r : RE) : (closure r).ncard ≤ B r := by
+/-- The quantitative bound, for canonical terms.  The `Canonical r`
+hypothesis is NOT decorative: DeepSeek review 2026-08-18 refuted the
+unguarded statement with `¬¬∅` and `∅|∅`, whose raw initial terms are
+extra states the recurrences do not count (closure = 2, B = 1; confirmed
+by six decide-measurements).  (`Set.ncard` is 0 on infinite sets, so this
+is consumed together with `closure_finite`.) -/
+theorem closure_ncard_le (r : RE) (h : Canonical r) :
+    (closure r).ncard ≤ B r := by
+  sorry
+
+/-- Unguarded corollary form: canonicalise first, then the bound holds for
+any input term. -/
+theorem closure_canon_ncard_le (r : RE) :
+    (closure (canon r)).ncard ≤ B (canon r) := by
   sorry
 
 /-- The tightness witness: `Σ* a Σ^k` — "the (k+1)-th character from the end
