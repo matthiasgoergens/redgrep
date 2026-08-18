@@ -1,5 +1,8 @@
 import Mathlib.Computability.Language
 import Core
+-- `_root_.invHom` (used in `lang` below) is defined in `Statements.lean`;
+-- this import is the only change made to this file.
+import Statements
 
 /-!
 # Redgrep semantics
@@ -23,6 +26,7 @@ def lang : RE → Language Char
   | .seq r₁ r₂ => lang r₁ * lang r₂
   | .rep r => (lang r)∗
   | .not r => (lang r)ᶜ
+  | .invHom h r => _root_.invHom h (lang r)
   | .eps => 1
   | .nil => 0
 

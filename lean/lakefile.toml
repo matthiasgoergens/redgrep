@@ -1,5 +1,5 @@
 name = "redgrep"
-defaultTargets = ["Statements", "Core", "Semantics", "Correctness"]
+defaultTargets = ["Statements", "Core", "Semantics", "Correctness", "Proposals"]
 
 [[require]]
 name = "mathlib"
@@ -17,3 +17,6 @@ name = "Semantics"
 
 [[lean_lib]]
 name = "Correctness"
+
+[[lean_lib]]
+name = "Proposals"
