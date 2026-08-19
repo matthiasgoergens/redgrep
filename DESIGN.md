@@ -194,6 +194,18 @@ Next rules, in payoff order: multi-literal prefilters (Teddy-style) via
 FFI later; String-side engines byte-native; the same memchr trick
 transfers to the Lean twin via @[extern].
 
+## Aristotle usage protocol (2026-08-19, per Matthias)
+
+Three tools, not one. (a) SATELLITES: fresh projects seeded with already-
+proved lemma files, one small goal each, full budget per theorem — the
+budget-exhaustion answer. (b) PROPOSALS amendment on every submission:
+alternative definitions welcome as additions with equivalence proofs
+(paid off immediately: matchW, derivW-as-primitive). (c) DESIGN
+CONSULTATIONS: ask-mode questions mining whole-system insight — which of
+our definitions cause proof friction, how to architect the next phase —
+from the projects with the deepest context. Its design answers are
+reported evidence like any reviewer's: check before adopting.
+
 ## Review outcomes (2026-08-17, two adversarial passes + Matthias)
 
 Adopted immediately (in the phase-1 commit series):
