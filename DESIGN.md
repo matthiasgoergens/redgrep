@@ -194,6 +194,46 @@ Next rules, in payoff order: multi-literal prefilters (Teddy-style) via
 FFI later; String-side engines byte-native; the same memchr trick
 transfers to the Lean twin via @[extern].
 
+## Lean as a systems language: the gap list (2026-08-18/19)
+
+What exists: real C FFI (@[extern] + lake extern_lib, hand-written shims
+against lean.h), ByteArray/unboxed scalars, Perceus RC with compile-time
+reuse pairing — so dense tables walk at native speed and perf works on
+the compiled binary. What's missing, in our priority order: (1) FFI
+ergonomics + a trust discipline — bind memchr/memmem behind a Lean
+signature whose contract is a stated proposition, property-test the
+boundary, prove everything above it (planner rule 1 verified-modulo-
+shim); (2) mmap and tuned byte IO; (3) SIMD only via C; (4) binary size,
+cross-compilation, struct packing.
+
+### In-place mutation: runtime vs static (2026-08-19)
+
+Lean's reuse is static ANALYSIS but a runtime GUARANTEE: reset/reuse
+tokens are inserted at compile time, yet reset still compiles to an
+isShared refcount check with a copying slow path — FBIP style reliably
+hits the fast path but nothing proves it. The static answer exists one
+language over: Koka's FIP ("fully in-place functional programming",
+Lorenzen-Leijen-Swierstra, ICFP 2023 — citation from memory, verify),
+a type discipline making zero-allocation in-place execution a
+compile-time fact; the general mechanism is uniqueness/linear types.
+GHC prior art to survey (all hedged, from memory): LinearTypes (Bernardy
+et al., POPL 2018) — checked but does not currently drive in-place
+update; destination-passing-style work in Linear Haskell (Bagrel);
+demand/cardinality analysis and one-shot lambdas as the analysis-side
+precedent; stream fusion as the allocation-removal precedent. Motivating
+examples the FIP literature brags about (verify): red-black tree
+insertion/rebalancing, Morris traversal via pointer reversal, in-place
+sorting of list structures.
+
+DECISION (Matthias, 2026-08-19): an FIP-style static checker for Lean is
+interesting but NOT this project's critical path — redgrep's hot path
+(compiled-DFA walk) mutates nothing; FIP concerns concentrate in
+run-once builder code. Pursue in an INDEPENDENT session with its own
+motivating example (start from the FIP papers' own showcases). For
+redgrep, the lighter path stands: allocation bounds as theorems over an
+instrumented cost semantics, model-to-runtime gap covered by
+measurement.
+
 ## Aristotle usage protocol (2026-08-19, per Matthias)
 
 Three tools, not one. (a) SATELLITES: fresh projects seeded with already-

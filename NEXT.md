@@ -67,6 +67,14 @@ logs/2026-08-17/ with commit + command.
 - Aristotle project 4385f9c0 (Lean twin correctness sorries) pending;
   verify locally on return (lake build, no sorry, #print axioms).
 
+## Spun-off threads (not this project's critical path)
+
+- FIP-style static in-place checker for Lean (and the GHC prior-art
+  survey: LinearTypes, destination-passing, cardinality analysis):
+  independent session, own motivating example — see DESIGN.md
+  "In-place mutation: runtime vs static". Decision and reasons recorded
+  there 2026-08-19.
+
 ## Unverified beliefs (do not treat as fact)
 
 - "flapping" name origin: from 2016 Red.hs:663; no google/redgrep origin
