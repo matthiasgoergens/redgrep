@@ -73,7 +73,10 @@ logs/2026-08-17/ with commit + command.
   survey: LinearTypes, destination-passing, cardinality analysis):
   independent session, own motivating example — see DESIGN.md
   "In-place mutation: runtime vs static". Decision and reasons recorded
-  there 2026-08-19.
+  there 2026-08-19. CANDIDATE MOTIVATING EXAMPLE found 2026-08-19:
+  Langley's zstd-in-Lean FSE decoder (imperialviolet.org 2026-07-26,
+  10x vs C, names RC-invisibility as the killer) — a real, published,
+  quantified instance of exactly the problem the checker would solve.
 
 ## Unverified beliefs (do not treat as fact)
 

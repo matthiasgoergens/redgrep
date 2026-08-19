@@ -206,6 +206,30 @@ boundary, prove everything above it (planner rule 1 verified-modulo-
 shim); (2) mmap and tuned byte IO; (3) SIMD only via C; (4) binary size,
 cross-compilation, struct packing.
 
+### External corroboration: zstd-in-Lean (Langley, imperialviolet.org,
+2026-07-26; mined 2026-08-19)
+
+A verified FSE/zstd decoder in Lean measured 10x slower than C zstd.
+His pain points, mapped to our list (all "per the post" — read via
+summariser, verify against the original before quoting): (1) THE
+CENTRAL ONE, corroborating our FIP thread from a practitioner: RC
+sharing is invisible — "a seemingly minor tweak can completely crater
+performance by holding onto a reference to a large array somewhere
+inconspicuous"; no linear/uniqueness types to make the in-place fast
+path a static fact. This is independent testimony that uniqueness
+VISIBILITY (checker or at minimum a may-copy diagnostic) is the single
+highest-value language change. (2) Imperative-mode (Id.run) code
+complicates proof automation — the invariant-carrying that makes
+bounds-check elimination possible is painful exactly where the hot
+loops live; Lean folk reportedly working on it. (3) Verified-assembly
+route blocked: bv_decide (certifying bitblast) exhausts memory on small
+examples — relevant ceiling for any future verified-SIMD ambition.
+(4) Type-checker memory blowups on complicated proofs. New items for
+the gap list: uniqueness visibility (top), imperative-proof automation,
+bv_decide scalability. Also note his FSE workload is branchy
+table-walk-plus-bit-reads — structurally our DFA loop, so the 10x is a
+relevant prior for un-tuned verified Lean vs C on redgrep-shaped code.
+
 ### In-place mutation: runtime vs static (2026-08-19)
 
 Lean's reuse is static ANALYSIS but a runtime GUARANTEE: reset/reuse
