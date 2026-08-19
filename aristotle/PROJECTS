@@ -2,3 +2,4 @@
 4385f9c0-3e4f-4994-9395-4a31f9cab14c  VERIFIED 2026-08-17   Lean twin correctness: nullable_correct, lang_deriv, deriv_correct, matchRE_correct — lake build clean, standard axioms only (archive: lean-twin-4385f9c0.tar.gz)
 91db97a8-c9a9-4f7f-96fc-7e21e5eab051  VERIFIED 2026-08-18   EXPERIMENT SUCCEEDED: Aristotle wrote total derivW (recursion on regex, word shrinks in rep), proved all four v2 theorems + matchW proposal; executable (#eval checked)
 562a4b1a-4ba3-42e5-9abb-23e4a115998e  submitted 2026-08-18  v3 bounds: closure_finite, closure_ncard_le (Canonical-guarded, post-refutation), canon corollary + v3 correctness/smart-constructor contracts
+83b1383a-9355-4a4d-98d9-b8d36f56a2cf  submitted 2026-08-19  SATELLITE of 562a4b1a: closure_finite alone, seeded with its proved lemma layer
