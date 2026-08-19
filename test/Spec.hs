@@ -321,6 +321,13 @@ prop_invHom = do
         , Map.fromList [('a', ""), ('b', "")]
         , Map.fromList [('a', "b"), ('b', "a")]
         , Map.fromList [('a', "aa")]
+          -- identity entries: the Lean twin's assoc-list representation was
+          -- proved UNSOUND here (Aristotle 2026-08-19, duplicate keys let the
+          -- identity-entry filter expose a shadowed binding).  Haskell's Map
+          -- has unique keys by construction, so the same filter is sound —
+          -- this case pins that difference down by measurement.
+        , Map.fromList [('a', "a"), ('b', "ab")]
+        , Map.fromList [('a', "a"), ('b', "b")]
         ]
 
 -- ---------------------------------------------------------------------------
