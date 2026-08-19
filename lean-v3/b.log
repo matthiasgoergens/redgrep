@@ -1,0 +1,22 @@
+⚠ [745/956] Replayed Correctness
+warning: Correctness.lean:30:8: declaration uses `sorry`
+warning: Correctness.lean:35:8: declaration uses `sorry`
+warning: Correctness.lean:39:8: declaration uses `sorry`
+warning: Correctness.lean:43:8: declaration uses `sorry`
+warning: Correctness.lean:47:8: declaration uses `sorry`
+warning: Correctness.lean:59:8: declaration uses `sorry`
+warning: Correctness.lean:63:8: declaration uses `sorry`
+warning: Correctness.lean:67:8: declaration uses `sorry`
+warning: Correctness.lean:72:8: declaration uses `sorry`
+warning: Correctness.lean:76:8: declaration uses `sorry`
+warning: Correctness.lean:79:8: declaration uses `sorry`
+warning: Correctness.lean:82:8: declaration uses `sorry`
+warning: Correctness.lean:85:8: declaration uses `sorry`
+warning: Correctness.lean:88:8: declaration uses `sorry`
+warning: Correctness.lean:93:8: declaration uses `sorry`
+warning: Correctness.lean:98:8: declaration uses `sorry`
+⚠ [955/956] Built Bounds (740ms)
+warning: Bounds.lean:75:8: declaration uses `sorry`
+warning: Bounds.lean:84:8: declaration uses `sorry`
+warning: Bounds.lean:90:8: declaration uses `sorry`
+Build completed successfully (956 jobs).

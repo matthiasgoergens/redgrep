@@ -1,0 +1,8 @@
+✔ [947/956] Built Statements (7.5s)
+✖ [949/956] Building Core (10s)
+trace: .> LEAN_PATH=/home/matthias/prog/haskell/redgrep/lean-v3/.lake/packages/Cli/.lake/build/lib/lean:/home/matthias/prog/haskell/redgrep/lean-v3/.lake/packages/batteries/.lake/build/lib/lean:/home/matthias/prog/haskell/redgrep/lean-v3/.lake/packages/Qq/.lake/build/lib/lean:/home/matthias/prog/haskell/redgrep/lean-v3/.lake/packages/aesop/.lake/build/lib/lean:/home/matthias/prog/haskell/redgrep/lean-v3/.lake/packages/proofwidgets/.lake/build/lib/lean:/home/matthias/prog/haskell/redgrep/lean-v3/.lake/packages/importGraph/.lake/build/lib/lean:/home/matthias/prog/haskell/redgrep/lean-v3/.lake/packages/LeanSearchClient/.lake/build/lib/lean:/home/matthias/prog/haskell/redgrep/lean-v3/.lake/packages/plausible/.lake/build/lib/lean:/home/matthias/prog/haskell/redgrep/lean-v3/.lake/packages/mathlib/.lake/build/lib/lean:/home/matthias/prog/haskell/redgrep/lean-v3/.lake/build/lib/lean /home/matthias/.elan/toolchains/leanprover--lean4---v4.28.0/bin/lean /home/matthias/prog/haskell/redgrep/lean-v3/Core.lean -o /home/matthias/prog/haskell/redgrep/lean-v3/.lake/build/lib/lean/Core.olean -i /home/matthias/prog/haskell/redgrep/lean-v3/.lake/build/lib/lean/Core.ilean -c /home/matthias/prog/haskell/redgrep/lean-v3/.lake/build/ir/Core.c --setup /home/matthias/prog/haskell/redgrep/lean-v3/.lake/build/ir/Core.setup.json --json
+error: Core.lean:146:4: `Redgrep.RE.ctorIdx` has already been declared
+error: Lean exited with code 1
+Some required targets logged failures:
+- Core
+error: build failed

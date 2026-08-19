@@ -1,5 +1,5 @@
 name = "redgrepv3"
-defaultTargets = ["Statements", "Core", "Semantics", "Correctness", "Bounds"]
+defaultTargets = ["SatMain", "SatSeq", "ChainPool", "SatCases", "SatPool", "ClosureSpan", "ClsBound", "DerivCanon", "ClosureSat", "CutAlg", "AltAlg", "ClsAlg", "Statements", "Core", "CharCard", "REOrder", "ACIDefs", "ACIAlt", "ACICut", "ACISeq", "ACI", "Semantics", "SmartLang", "Engine", "Correctness", "Closure", "Bounds"]
 
 [[require]]
 name = "mathlib"
@@ -20,3 +20,69 @@ name = "Correctness"
 
 [[lean_lib]]
 name = "Bounds"
+
+[[lean_lib]]
+name = "CharCard"
+
+[[lean_lib]]
+name = "REOrder"
+
+[[lean_lib]]
+name = "ACIDefs"
+
+[[lean_lib]]
+name = "ACIAlt"
+
+[[lean_lib]]
+name = "ACICut"
+
+[[lean_lib]]
+name = "ACISeq"
+
+[[lean_lib]]
+name = "ACI"
+
+[[lean_lib]]
+name = "SmartLang"
+
+[[lean_lib]]
+name = "Closure"
+
+[[lean_lib]]
+name = "Engine"
+
+[[lean_lib]]
+name = "ClsAlg"
+
+[[lean_lib]]
+name = "AltAlg"
+
+[[lean_lib]]
+name = "CutAlg"
+
+[[lean_lib]]
+name = "ClosureSat"
+
+[[lean_lib]]
+name = "DerivCanon"
+
+[[lean_lib]]
+name = "ClsBound"
+
+[[lean_lib]]
+name = "ClosureSpan"
+
+[[lean_lib]]
+name = "SatPool"
+
+[[lean_lib]]
+name = "SatCases"
+
+[[lean_lib]]
+name = "ChainPool"
+
+[[lean_lib]]
+name = "SatSeq"
+
+[[lean_lib]]
+name = "SatMain"

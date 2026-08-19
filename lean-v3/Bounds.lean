@@ -1,4 +1,5 @@
 import Correctness
+import ClosureSat
 import Mathlib.Data.Set.Card
 
 /-!
@@ -72,8 +73,8 @@ states.  (For the v2 engine without smart constructors this is *false* in
 general — associativity alone regenerates unboundedly many terms — which is
 exactly why v3 exists.)  Stated for arbitrary `r`: the raw initial term
 adds at most one state, so finiteness is unconditional. -/
-theorem closure_finite (r : RE) : (closure r).Finite := by
-  sorry
+theorem closure_finite (r : RE) : (closure r).Finite :=
+  derivs_range_finite r
 
 /-- The quantitative bound, for canonical terms.  The `Canonical r`
 hypothesis is NOT decorative: DeepSeek review 2026-08-18 refuted the
