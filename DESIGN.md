@@ -258,6 +258,40 @@ redgrep, the lighter path stands: allocation bounds as theorems over an
 instrumented cost semantics, model-to-runtime gap covered by
 measurement.
 
+## The prover as final reviewer: the duplicate-key invHom bug (2026-08-19)
+
+Asked to prove the v3 engine correct, Aristotle instead REFUTED it —
+with a concrete Lean counterexample, exactly as the report-don't-weaken
+protocol requires. Mechanism: v3 represents a homomorphism as
+`List (Char × List Char)`; `applyHom` takes the FIRST binding for a key,
+while the `invHom_` smart constructor filters out identity entries — so
+for `h₀ = [('a',['a']), ('a',[])]` (duplicate key, semantically the
+identity), filtering the identity entry EXPOSES the shadowed `('a',[])`
+and changes the language. It proved `¬ ∀ c r, lang (deriv c r) =
+deriv1 c (lang r)` outright, then supplied `HomsStable`-guarded
+corrected versions.
+
+Provenance matters here: the assoc list mirrors the Haskell original's
+`Map Char String`, whose keys are unique BY CONSTRUCTION — so the
+identity-filter is sound in Haskell and the bug is an artefact of
+weakening Map to a list. Verified rather than assumed: hom maps
+containing identity entries were added to the Haskell property suite
+(prop_invHom), and pass.
+
+Repair (satellite 338c59a0): rather than carry `HomsStable` forever,
+restore the missing invariant — normalisation must satisfy the contract
+`applyHom (homNorm h) c = applyHom h c` (suggested route: dedup by key,
+keeping the FIRST binding, before filtering identity entries). We own
+the contract; Aristotle owns the implementation, the lemma-layer
+repairs, and the re-proof of the UNGUARDED theorems — the derivW
+pattern again.
+
+The general lesson, worth more than the bug: a prover asked for proofs
+is also the most rigorous reviewer available, because it cannot
+rationalise. Two of our three refutations this week (the bounds
+statements, this one) came from adversarial checks BEFORE the work was
+built on, and both were representation-level, not logic-level.
+
 ## Aristotle usage protocol (2026-08-19, per Matthias)
 
 Three tools, not one. (a) SATELLITES: fresh projects seeded with already-
