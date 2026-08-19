@@ -258,6 +258,31 @@ redgrep, the lighter path stands: allocation bounds as theorems over an
 instrumented cost semantics, model-to-runtime gap covered by
 measurement.
 
+## Why the evil pattern is slow: measured, 2026-08-19
+
+Hypothesis under test: `(a?)^n a^n` is slow because ACI canonicalisation
+fails to merge states. REFUTED by measurement (tools/, scratch program):
+our derivative closure has EXACTLY 2n+2 states for n = 4..12 — the
+minimal DFA count for the language {a^k : n ≤ k ≤ 2n}. State merging is
+already optimal.
+
+The cost is term SIZE, not state count: max term size grows ~2.5n²
+(43, 94, 165, 256, 367 for n = 4, 6, 8, 10, 12). Combined with the
+benchmark fact that match, matchMemo and matchDfa are all within 10% of
+each other on this workload (20.0 / 20.1 / 21.8 ms at n=25), the cost is
+located precisely: it is INSIDE `deriv`, in the Set operations of the
+smart constructors, whose comparisons are O(term size) — not in state
+interning, which the identical timings rule out.
+
+So the roadmap item "hash-consing" is confirmed and sharpened: what is
+needed is a cached hash in the AST so Eq/Ord are O(1) in the common
+case (RE = RE !Int Node, hash computed by the smart constructors,
+compare hash first then structure). Expected effect: the O(n) states x
+O(n²) comparison cost collapses toward O(n²) total. An NFA/Glushkov
+backend for the positive fragment would ALSO fix this class, but the
+measurement says it is not required — the derivative engine already
+finds the minimal state set here.
+
 ## The prover as final reviewer: the duplicate-key invHom bug (2026-08-19)
 
 Asked to prove the v3 engine correct, Aristotle instead REFUTED it —

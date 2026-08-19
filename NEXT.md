@@ -42,9 +42,14 @@ logs/2026-08-17/ with commit + command.
    fast, then DFA; move matcher input to ByteString (all engines walk
    String today). Matthias explicitly wants the performance chase
    ("chase the ceiling list").
-2. **Hash-consing the AST** (kmett `intern` or manual table): fixes the
-   one-shot evil-pattern cost (state construction, not caching —
-   evil-aqn-an unchanged by interning, see DESIGN.md phase-3 notes).
+2. **Cached-hash AST** (`data RE = RE !Int Node`, hash from the smart
+   constructors, Eq/Ord compare hash first). NOW MEASURED AND SPECIFIED
+   (DESIGN.md "Why the evil pattern is slow"): closure size is already
+   minimal (exactly 2n+2 states), term size is the cost (~2.5n²), and
+   match/matchMemo/matchDfa timings being identical locates the cost
+   inside deriv's smart-constructor Set comparisons. This is a
+   mechanical but pervasive refactor of Core.hs + its pattern matches in
+   Oracle/Plan/tests/bench; the 39-property suite is the safety net.
 3. **Phase 2 evidence layer**: bit-coded trace + typed decode; failure
    evidence via mkeps-dual; implement Keil–Thiemann Δ/∇ as independent
    cross-check. MUST first write down the refutation disambiguation
