@@ -50,13 +50,18 @@ logs/2026-08-17/ with commit + command.
    inside deriv's smart-constructor Set comparisons. This is a
    mechanical but pervasive refactor of Core.hs + its pattern matches in
    Oracle/Plan/tests/bench; the 39-property suite is the safety net.
-3. **Phase 2 evidence layer**: bit-coded trace + typed decode; failure
-   evidence via mkeps-dual; implement Keil–Thiemann Δ/∇ as independent
-   cross-check. MUST first write down the refutation disambiguation
-   policy for seq/rep (open design question, DESIGN.md hazards) — and
-   `rep_ (Rep x) = Rep x` is UNSOUND for evidence (documented hazard).
-   Lean twin: seed from aristotle/Statements-proved.lean + local Lean
-   toolchain (how-to-use-lean-here.md); study pandaman64/lean-regex.
+3. **Phase 2 evidence layer** — architecture now DECIDED (DESIGN.md
+   "Phase-2 architecture"): single polarity-indexed family
+   `Ev : Bool → RE → List Char → Type`, purely structural with soundness
+   as theorems, tabulated first-order seq/rep refutations, and the
+   disambiguation policy in a separate normalisation layer (preorder +
+   idempotent `pick`; candidate: blame the latest split, dual of POSIX
+   longest-match). Haskell side keeps the bit-coded trace + typed decode
+   plan; `rep_ (Rep x) = Rep x` remains UNSOUND for evidence.
+4. **Flagged holes to close first** (design review): RE.cmp lawfulness
+   unproved but load-bearing; charCount fullness unbacked (no
+   Fintype Char in pinned Mathlib); smart `sym` shadows `RE.sym` so
+   deriv_sym cannot fire.
 
 ## Open items
 

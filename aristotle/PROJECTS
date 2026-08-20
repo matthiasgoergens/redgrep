@@ -4,3 +4,5 @@
 562a4b1a-4ba3-42e5-9abb-23e4a115998e  submitted 2026-08-18  v3 bounds: closure_finite, closure_ncard_le (Canonical-guarded, post-refutation), canon corollary + v3 correctness/smart-constructor contracts
 83b1383a-9355-4a4d-98d9-b8d36f56a2cf  submitted 2026-08-19  SATELLITE of 562a4b1a: closure_finite alone, seeded with its proved lemma layer
 338c59a0-06c9-42a8-ba68-7e10a44bed2e  submitted 2026-08-19  SATELLITE: fix invHom duplicate-key unsoundness (homNorm contract) + unguarded engine theorems
+cebfce77-27b3-4db8-ad2d-be079f57fb7d  submitted 2026-08-19  DESIGN CONSULTATION (prose): definitions friction, bounds formulation, evidence-in-Lean, restructuring
+e843df3d-5c38-43f5-8c6f-fb36e3f1d149  submitted 2026-08-20  SATELLITE: closure_spanned (reformulated bounds headline) + corollaries

@@ -317,6 +317,57 @@ rationalise. Two of our three refutations this week (the bounds
 statements, this one) came from adversarial checks BEFORE the work was
 built on, and both were representation-level, not logic-level.
 
+## Phase-2 architecture, from the design consultation (2026-08-20)
+
+Aristotle's 722-line review is at aristotle/design-answers.md; it also
+independently rediscovered the duplicate-key invHom defect while
+answering Q1. Decisions adopted:
+
+**Evidence representation.** ONE inductive family indexed by polarity,
+`Ev : Bool → RE → List Char → Type`, not two mutually-defined families.
+`not` becomes two clauses and the De Morgan swap is literally the index
+flip — "complement swaps the two" is `rfl` — and, decisively, there is a
+single derived recursor, so soundness/completeness are one induction
+with the polarity generalised rather than hand-driven mutual
+eliminators. Duality then reads off the constructor table (alt: choice
+vs PAIR of refutations; cut: pair vs CHOICE of conjunct; sym positive vs
+"not one char, or wrong char"; seq: split+two parses vs ALL splits
+refuted).
+
+Two explicit don'ts: do NOT put `w ∉ lang r` inside the refutation type
+(mixes Prop and Type, makes the family non-inspectable so blame cannot
+be extracted, and kills computation) — keep `Ev` purely structural and
+prove `Ev false r w → w ∉ lang r` as a theorem. Do NOT index by
+derivative history: a run of the automaton is not a typed parse tree,
+and reconstructing the tree is the actual work.
+
+**seq/rep refutations** are intrinsically universally quantified over
+splits. Use the TABULATED first-order encoding (one entry per split over
+`List.range (w.length+1)`), not the higher-order `∀ u v, w = u ++ v → …`
+premise, which would make the recursor higher-order and evidence
+non-serialisable — fatal if refutations are to be handed to users.
+
+**The refutation disambiguation policy lives OUTSIDE the type**: keep
+`Ev` unbiased, put the policy in a separate normalisation layer as a
+preorder plus an idempotent `pick`. Concrete candidate policy: "blame
+the latest split / where consumption stalled", the dual of POSIX
+longest-match. This answers the open question that has gated phase 2.
+
+**Known holes it flagged, to fix before more stacks up**: `RE.cmp`'s
+lawfulness is unproved and load-bearing for the whole ACI layer; the
+`charCount` fullness test is an unbacked bridge (there is no
+`Fintype Char` in the pinned Mathlib — either build the cardinality
+proof by hand or drop the pos-side fullness test); and the smart `sym`
+shadows `RE.sym`, so `deriv_sym` cannot fire on engine-produced terms.
+
+**Machine constructor advice**: no function-valued Mathlib `DFA` in the
+AST; class-partitioned rather than dense transition tables (the alphabet
+has ~1.1M letters — note this contradicts the Haskell side's dense
+0..255 byte tables, which are fine precisely because they are BYTE
+tables); carry the current state in the node so the derivative is a pure
+lookup. Also recommended: `#guard` conformance tests against the Haskell
+twin.
+
 ## Aristotle usage protocol (2026-08-19, per Matthias)
 
 Three tools, not one. (a) SATELLITES: fresh projects seeded with already-
