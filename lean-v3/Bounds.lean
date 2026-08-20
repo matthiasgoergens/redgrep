@@ -76,20 +76,43 @@ adds at most one state, so finiteness is unconditional. -/
 theorem closure_finite (r : RE) : (closure r).Finite :=
   derivs_range_finite r
 
-/-- The quantitative bound, for canonical terms.  The `Canonical r`
-hypothesis is NOT decorative: DeepSeek review 2026-08-18 refuted the
-unguarded statement with `¬¬∅` and `∅|∅`, whose raw initial terms are
-extra states the recurrences do not count (closure = 2, B = 1; confirmed
-by six decide-measurements).  (`Set.ncard` is 0 on infinite sets, so this
-is consumed together with `closure_finite`.) -/
-theorem closure_ncard_le (r : RE) (h : Canonical r) :
-    (closure r).ncard ≤ B r := by
+/-- **The headline quantitative statement** (reformulated 2026-08-20 on
+Aristotle's design review, aristotle/design-answers.md §2.2): a *spanning
+set* — an explicitly finite set containing `r` and closed under one-step
+derivatives, of size at most `B r`.
+
+Why this shape rather than `(closure r).ncard ≤ B r`: `Set.ncard` is `0`
+on infinite sets, so the inequality form is *implied by* infiniteness and
+is only meaningful alongside `closure_finite`. The spanning form cannot be
+satisfied vacuously, is strictly stronger, and is also the natural proof:
+each constructor becomes a construction plus a closedness check, with the
+exponentials falling out of `Finset.card_powerset` / `card_product`
+(seq: index by `S_r × powerset S_s` via Brzozowski's shape theorem; rep:
+`powerset S_r` plus `rep_ r`) instead of an arithmetic induction. It also
+does not depend on `canon` being ACI-complete, only on the
+smart-constructor derivative laws that everything else needs anyway.
+
+The `Canonical` hypothesis stays: the raw initial term of a non-canonical
+input is an extra state the recurrences do not count (the `¬¬∅` / `∅|∅`
+refutation of 2026-08-18). The recommended structural fix is for the
+engine entry point to canonicalise its input, at which point this
+hypothesis disappears from user-facing statements — deferred, since it
+changes `matchRE`. -/
+theorem closure_spanned (r : RE) (h : Canonical r) :
+    ∃ S : Finset RE, r ∈ S ∧ (∀ t ∈ S, ∀ c : Char, deriv c t ∈ S) ∧ S.card ≤ B r := by
   sorry
 
-/-- Unguarded corollary form: canonicalise first, then the bound holds for
-any input term. -/
-theorem closure_canon_ncard_le (r : RE) :
-    (closure (canon r)).ncard ≤ B (canon r) := by
+/-- Bridge: a spanning set contains the whole reachable closure (induction
+on the word, using only membership and closedness). -/
+theorem closure_subset_of_spanned (r : RE) (S : Finset RE)
+    (hr : r ∈ S) (hclosed : ∀ t ∈ S, ∀ c : Char, deriv c t ∈ S) :
+    closure r ⊆ (S : Set RE) := by
+  sorry
+
+/-- The cardinality bound, now a corollary of `closure_spanned` +
+`closure_subset_of_spanned` rather than a headline. -/
+theorem closure_ncard_le (r : RE) (h : Canonical r) :
+    (closure r).ncard ≤ B r := by
   sorry
 
 /-- The tightness witness: `Σ* a Σ^k` — "the (k+1)-th character from the end
