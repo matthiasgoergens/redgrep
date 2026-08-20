@@ -10,13 +10,12 @@ denotes exactly the language of the plain constructor it canonicalises.  These
 are the lemmas that let the engine — which is routed through the smart
 constructors — be verified against `lang` by the ordinary Brzozowski argument.
 
-The one deviation from the v3 statement sheet concerns `invHom_`: it
-normalises its association list (dropping identity entries, sorting,
-deduplicating), and for a list with *duplicate keys* that changes the denoted
-homomorphism, because `applyHom` resolves a key by "first hit wins".  The
-language-preservation statement therefore carries the hypothesis `HomWF h`
-("the keys of `h` are distinct"); `Correctness.lean` documents the
-counterexample refuting the unguarded form.
+`invHom_` normalises its association list (`homNorm`).  Because `applyHom`
+resolves a key by "first hit wins", normalisation deduplicates *by key* —
+keeping the first binding — before dropping identity entries, sorting and
+deduplicating; it therefore preserves the denoted homomorphism pointwise
+(`homNorm_applyHom`), and the language-preservation statement for `invHom_`
+(`Engine.lean`, `Correctness.lean`) needs no side condition.
 -/
 
 open Language Computability

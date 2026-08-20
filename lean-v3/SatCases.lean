@@ -168,19 +168,17 @@ theorem subperm_finite (h : List (Char × List Char)) :
   exact List.mem_permutations.mpr hl.symm
 
 /-- `invHom_` either collapses, or keeps the body under a *sub-permutation*
-of the given homomorphism (it filters, sorts and deduplicates it). -/
+of the given homomorphism (it dedups it by key, filters, sorts and
+deduplicates it). -/
 theorem invHom_cases (g : List (Char × List Char)) (x : RE) :
     invHom_ g x = .nil ∨ invHom_ g x = x ∨
       ∃ g', g'.Subperm g ∧ invHom_ g x = .invHom g' x := by
-  unfold invHom_
+  rw [invHom_eq_ite]
   split
   · exact Or.inl rfl
-  · simp only []
-    split
+  · split
     · exact Or.inr (Or.inl rfl)
-    · refine Or.inr (Or.inr ⟨_, ?_, rfl⟩)
-      exact ((List.dedup_sublist _).subperm.trans
-        (List.mergeSort_perm _ _).subperm).trans List.filter_sublist.subperm
+    · exact Or.inr (Or.inr ⟨_, homNorm_subperm g, rfl⟩)
 
 theorem exists_sat_invHom {U : Finset Char} {Pa : Set RE} {hm : List (Char × List Char)} {a : RE}
     (hPa : Sat U Pa) (ha : a ∈ Pa) : ∃ P, Sat U P ∧ (RE.invHom hm a) ∈ P := by

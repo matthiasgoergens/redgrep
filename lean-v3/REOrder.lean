@@ -359,25 +359,18 @@ theorem sortDedup_eq_of_mem_iff {l l' : List RE} (h : ∀ x, x ∈ l ↔ x ∈ l
 @[simp] theorem sortDedup_idem (l : List RE) : sortDedup (sortDedup l) = sortDedup l :=
   sortDedup_eq_self (sortDedup_sorted l) (sortDedup_nodup l)
 
-/-! ### The same normal form for hom association lists -/
+/-! ### The same normal form for hom association lists
 
-/-- The hom normal form computed inside `invHom_`. -/
-def homNorm (h : List (Char × List Char)) : List (Char × List Char) :=
-  ((h.filter fun p => p.2 != [p.1]).mergeSort
-    fun a b => (RE.cmpHomEntry a b).isLE).dedup
+`homNorm` (`Core.lean`) is the normal form used inside `invHom_`: deduplicate
+by key (first binding wins — the one `applyHom` resolves to), drop identity
+entries, sort, dedup.  Below: the mem/nodup/sorted/idempotence API, and the
+CONTRACT `homNorm_applyHom`, i.e. that normalisation preserves the denoted
+homomorphism pointwise. -/
 
 theorem invHom_eq_ite (h : List (Char × List Char)) (r : RE) :
     invHom_ h r =
       if r = .nil then .nil else if homNorm h = [] then r else .invHom (homNorm h) r := by
   cases r <;> simp [invHom_, homNorm]
-
-@[simp] theorem mem_homNorm {p : Char × List Char} {h : List (Char × List Char)} :
-    p ∈ homNorm h ↔ p ∈ h ∧ p.2 ≠ [p.1] := by
-  simp only [homNorm, List.mem_dedup]
-  rw [(List.mergeSort_perm _ _).mem_iff, List.mem_filter]
-  simp
-
-theorem homNorm_nodup (h : List (Char × List Char)) : (homNorm h).Nodup := List.nodup_dedup _
 
 theorem homEntry_le_trans {a b c : Char × List Char}
     (h1 : (RE.cmpHomEntry a b).isLE = true) (h2 : (RE.cmpHomEntry b c).isLE = true) :
@@ -407,9 +400,200 @@ theorem homEntry_le_antisymm {a b : Char × List Char} (h1 : (RE.cmpHomEntry a b
       | exact absurd h2 (by decide)
       | exact (RE.cmpHomEntry_eq_iff _ _).mp h
 
+/-! #### Deduplication by key -/
+
+theorem mem_of_mem_homDedupKeys {p : Char × List Char} {l : List (Char × List Char)}
+    (hp : p ∈ homDedupKeys l) : p ∈ l := (homDedupKeys_sublist l).mem hp
+
+theorem homDedupKeys_keys_nodup :
+    ∀ l : List (Char × List Char), ((homDedupKeys l).map Prod.fst).Nodup
+  | [] => by rw [homDedupKeys]; simp
+  | p :: ps => by
+    rw [homDedupKeys, List.map_cons, List.nodup_cons]
+    refine ⟨fun hmem => ?_, homDedupKeys_keys_nodup (ps.filter fun q => q.1 != p.1)⟩
+    obtain ⟨q, hq, hkey⟩ := List.mem_map.mp hmem
+    have hq' := List.mem_filter.mp (mem_of_mem_homDedupKeys hq)
+    exact absurd hkey (by simpa using hq'.2)
+termination_by l => l.length
+decreasing_by
+  simp only [List.length_cons]
+  exact Nat.lt_succ_of_le (List.length_filter_le _ _)
+
+theorem homDedupKeys_nodup (l : List (Char × List Char)) : (homDedupKeys l).Nodup :=
+  (homDedupKeys_keys_nodup l).of_map _
+
+/-- On a list whose keys are already distinct, deduplication by key does
+nothing. -/
+theorem homDedupKeys_eq_self : ∀ {l : List (Char × List Char)},
+    (l.map Prod.fst).Nodup → homDedupKeys l = l
+  | [], _ => by rw [homDedupKeys]
+  | p :: ps, hnd => by
+    rw [List.map_cons, List.nodup_cons] at hnd
+    have hf : ps.filter (fun q => q.1 != p.1) = ps :=
+      List.filter_eq_self.mpr fun q hq => by
+        simp only [bne_iff_ne, ne_eq]
+        exact fun hkey => hnd.1 (List.mem_map.mpr ⟨q, hq, hkey⟩)
+    rw [homDedupKeys, hf, homDedupKeys_eq_self hnd.2]
+
+/-! #### `applyHom` basics -/
+
+/-- The image of a key present in a list with distinct keys. -/
+theorem applyHom_eq_of_mem {l : List (Char × List Char)} (hnd : (l.map Prod.fst).Nodup)
+    {c : Char} {img : List Char} (hp : (c, img) ∈ l) : applyHom l c = img := by
+  induction l with
+  | nil => simp at hp
+  | cons p t ih =>
+    rw [List.map_cons, List.nodup_cons] at hnd
+    unfold applyHom
+    by_cases hpc : p.1 = c
+    · rw [List.find?_cons_of_pos (by simp [hpc])]
+      rcases List.mem_cons.mp hp with rfl | hp'
+      · rfl
+      · exact absurd (by rw [hpc]; exact List.mem_map.mpr ⟨_, hp', rfl⟩) hnd.1
+    · rw [List.find?_cons_of_neg (by simpa using hpc)]
+      rcases List.mem_cons.mp hp with rfl | hp'
+      · exact absurd rfl hpc
+      · exact ih hnd.2 hp'
+
+/-- A key absent from the list maps to itself. -/
+theorem applyHom_eq_self {l : List (Char × List Char)} {c : Char}
+    (h : ∀ p ∈ l, p.1 ≠ c) : applyHom l c = [c] := by
+  induction l with
+  | nil => rfl
+  | cons p t ih =>
+    unfold applyHom
+    rw [List.find?_cons_of_neg (by simpa using h p (by simp))]
+    exact ih fun q hq => h q (by simp [hq])
+
+/-- Two association lists with distinct keys and the same entries denote the
+same homomorphism. -/
+theorem applyHom_congr {l l' : List (Char × List Char)} (hnd : (l.map Prod.fst).Nodup)
+    (hnd' : (l'.map Prod.fst).Nodup) (hmem : ∀ p, p ∈ l ↔ p ∈ l') :
+    applyHom l = applyHom l' := by
+  funext c
+  by_cases hex : ∃ img, (c, img) ∈ l
+  · obtain ⟨img, himg⟩ := hex
+    rw [applyHom_eq_of_mem hnd himg, applyHom_eq_of_mem hnd' ((hmem _).mp himg)]
+  · push_neg at hex
+    rw [applyHom_eq_self fun p hp hpc => hex p.2 (by rw [← hpc]; simpa using hp),
+      applyHom_eq_self fun p hp hpc =>
+        hex p.2 (by rw [← hpc]; simpa using (hmem p).mpr hp)]
+
+/-- Deleting entries under a *different* key does not change the image of `c`. -/
+theorem applyHom_filter_ne (l : List (Char × List Char)) {d c : Char} (hdc : d ≠ c) :
+    applyHom (l.filter fun q => q.1 != d) c = applyHom l c := by
+  induction l with
+  | nil => rfl
+  | cons q t ih =>
+    by_cases hq : q.1 = d
+    · rw [List.filter_cons_of_neg (by simp [hq]), ih]
+      unfold applyHom
+      rw [List.find?_cons_of_neg (by simp [hq, hdc])]
+    · rw [List.filter_cons_of_pos (by simpa using hq)]
+      unfold applyHom
+      by_cases hqc : q.1 = c
+      · rw [List.find?_cons_of_pos (by simp [hqc]), List.find?_cons_of_pos (by simp [hqc])]
+      · rw [List.find?_cons_of_neg (by simpa using hqc),
+          List.find?_cons_of_neg (by simpa using hqc)]
+        exact ih
+
+/-- Deduplication by key preserves the denoted homomorphism: `applyHom` sees
+exactly the first binding of each key, which is the one that is kept. -/
+theorem applyHom_homDedupKeys :
+    ∀ l : List (Char × List Char), applyHom (homDedupKeys l) = applyHom l
+  | [] => by rw [homDedupKeys]
+  | p :: ps => by
+    funext c
+    rw [homDedupKeys]
+    by_cases hpc : p.1 = c
+    · unfold applyHom
+      rw [List.find?_cons_of_pos (by simp [hpc]), List.find?_cons_of_pos (by simp [hpc])]
+    · have h1 : applyHom (p :: homDedupKeys (ps.filter fun q => q.1 != p.1)) c
+          = applyHom (homDedupKeys (ps.filter fun q => q.1 != p.1)) c := by
+        unfold applyHom
+        rw [List.find?_cons_of_neg (by simpa using hpc)]
+      have h2 : applyHom (p :: ps) c = applyHom ps c := by
+        unfold applyHom
+        rw [List.find?_cons_of_neg (by simpa using hpc)]
+      rw [h1, h2, congrFun (applyHom_homDedupKeys (ps.filter fun q => q.1 != p.1)) c,
+        applyHom_filter_ne ps (fun hc => hpc hc)]
+termination_by l => l.length
+decreasing_by
+  simp only [List.length_cons]
+  exact Nat.lt_succ_of_le (List.length_filter_le _ _)
+
+/-- On a list with distinct keys, dropping the identity entries preserves the
+denoted homomorphism. -/
+theorem applyHom_filter_id {l : List (Char × List Char)} (hnd : (l.map Prod.fst).Nodup) :
+    applyHom (l.filter fun p => p.2 != [p.1]) = applyHom l := by
+  have hnd' : (((l.filter fun p => p.2 != [p.1])).map Prod.fst).Nodup :=
+    hnd.sublist (List.filter_sublist.map _)
+  funext c
+  by_cases hex : ∃ img, (c, img) ∈ l
+  · obtain ⟨img, himg⟩ := hex
+    by_cases hid : img = [c]
+    · subst hid
+      rw [applyHom_eq_of_mem hnd himg]
+      refine applyHom_eq_self fun p hp hpc => ?_
+      rw [List.mem_filter] at hp
+      subst hpc
+      have : p = (p.1, [p.1]) := by
+        refine List.inj_on_of_nodup_map hnd hp.1 himg rfl
+      exact absurd (congrArg Prod.snd this) (by simpa using hp.2)
+    · have hmem : (c, img) ∈ l.filter fun p => p.2 != [p.1] :=
+        List.mem_filter.mpr ⟨himg, by simpa using hid⟩
+      rw [applyHom_eq_of_mem hnd' hmem, applyHom_eq_of_mem hnd himg]
+  · push_neg at hex
+    rw [applyHom_eq_self fun p hp hpc =>
+        hex p.2 (by rw [← hpc]; simpa using (List.mem_filter.mp hp).1),
+      applyHom_eq_self fun p hp hpc => hex p.2 (by rw [← hpc]; simpa using hp)]
+
+/-! #### The normal form `homNorm` -/
+
+/-- `homNorm h` is a permutation of the identity-free part of the key-deduped
+list: sorting permutes, and the dedup step is vacuous (the list already has
+distinct keys, hence distinct entries). -/
+theorem homNorm_perm (h : List (Char × List Char)) :
+    (homNorm h).Perm ((homDedupKeys h).filter fun p => p.2 != [p.1]) := by
+  have hnd : (((homDedupKeys h).filter fun p => p.2 != [p.1]).map Prod.fst).Nodup :=
+    (homDedupKeys_keys_nodup h).sublist (List.filter_sublist.map _)
+  have hperm := List.mergeSort_perm ((homDedupKeys h).filter fun p => p.2 != [p.1])
+    (fun a b => (RE.cmpHomEntry a b).isLE)
+  have hnds : (((homDedupKeys h).filter fun p => p.2 != [p.1]).mergeSort
+      fun a b => (RE.cmpHomEntry a b).isLE).Nodup := hperm.nodup_iff.mpr (hnd.of_map _)
+  rw [homNorm, List.dedup_eq_self.mpr hnds]
+  exact hperm
+
+@[simp] theorem mem_homNorm {p : Char × List Char} {h : List (Char × List Char)} :
+    p ∈ homNorm h ↔ p ∈ homDedupKeys h ∧ p.2 ≠ [p.1] := by
+  rw [(homNorm_perm h).mem_iff, List.mem_filter]
+  simp
+
+theorem homNorm_keys_nodup (h : List (Char × List Char)) :
+    ((homNorm h).map Prod.fst).Nodup :=
+  ((homDedupKeys_keys_nodup h).sublist (List.filter_sublist.map _)).perm
+    ((homNorm_perm h).map _).symm
+
+theorem homNorm_nodup (h : List (Char × List Char)) : (homNorm h).Nodup := List.nodup_dedup _
+
+/-- **The contract**: normalising an association list preserves the
+homomorphism it denotes, pointwise. -/
+theorem homNorm_applyHom (h : List (Char × List Char)) (c : Char) :
+    applyHom (homNorm h) c = applyHom h c := by
+  have h1 : applyHom (homNorm h)
+      = applyHom ((homDedupKeys h).filter fun p => p.2 != [p.1]) :=
+    applyHom_congr (homNorm_keys_nodup h)
+      ((homDedupKeys_keys_nodup h).sublist (List.filter_sublist.map _))
+      fun p => (homNorm_perm h).mem_iff
+  rw [congrFun h1 c, congrFun (applyHom_filter_id (homDedupKeys_keys_nodup h)) c,
+    congrFun (applyHom_homDedupKeys h) c]
+
+theorem homNorm_applyHom_eq (h : List (Char × List Char)) :
+    applyHom (homNorm h) = applyHom h := funext (homNorm_applyHom h)
+
 theorem homNorm_sorted (h : List (Char × List Char)) :
     (homNorm h).Pairwise (fun a b => (RE.cmpHomEntry a b).isLE = true) := by
-  have hs : (((h.filter fun p => p.2 != [p.1]).mergeSort
+  have hs : ((((homDedupKeys h).filter fun p => p.2 != [p.1]).mergeSort
       fun a b => (RE.cmpHomEntry a b).isLE)).Pairwise
       (fun a b => (RE.cmpHomEntry a b).isLE = true) :=
     List.pairwise_mergeSort (le := fun a b => (RE.cmpHomEntry a b).isLE)
@@ -420,7 +604,7 @@ theorem homNorm_sorted (h : List (Char × List Char)) :
   refine List.Perm.eq_of_pairwise (le := fun a b => (RE.cmpHomEntry a b).isLE = true)
     (fun a b _ _ hab hba => homEntry_le_antisymm hab hba) (homNorm_sorted _) (homNorm_sorted h) ?_
   refine (List.perm_ext_iff_of_nodup (homNorm_nodup _) (homNorm_nodup h)).mpr fun x => ?_
-  simp only [mem_homNorm]
-  tauto
+  rw [mem_homNorm, homDedupKeys_eq_self (homNorm_keys_nodup h)]
+  exact ⟨fun hx => hx.1, fun hx => ⟨hx, (mem_homNorm.mp hx).2⟩⟩
 
 end Redgrep

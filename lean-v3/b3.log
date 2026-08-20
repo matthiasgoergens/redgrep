@@ -1,0 +1,44 @@
+✔ [8028/8079] Built Core (19s)
+✔ [8030/8079] Built Semantics (8.5s)
+✔ [8032/8079] Built CharCard (37s)
+✔ [8034/8079] Built REOrder (38s)
+✔ [8036/8079] Built SmartLang (5.4s)
+✔ [8038/8079] Built ACIDefs (2.7s)
+✔ [8040/8079] Built Engine (3.1s)
+✔ [8042/8079] Built ClsAlg (3.6s)
+✔ [8044/8079] Built ACIAlt (3.7s)
+✔ [8045/8079] Built ACICut (3.7s)
+✔ [8048/8079] Built ACISeq (3.8s)
+✔ [8050/8079] Built ACI (2.7s)
+⚠ [8052/8079] Built AltAlg (3.3s)
+warning: AltAlg.lean:267:42: This simp argument is unused:
+  List.singleton_append
+
+Hint: Omit it from the simp argument list.
+  simp only [altMerged, hsc1, hsc, hCA, L̵i̵s̵t̵.̵s̵i̵n̵g̵l̵e̵t̵o̵n̵_̵a̵p̵p̵e̵n̵d̵,̵ ̵List.cons_append, List.nil_append, List.foldl_append,
+  ̲  ̲ ̲ ̲ ̲ ̲← hF]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+✔ [8054/8079] Built Closure (3.3s)
+✔ [8056/8079] Built Correctness (3.8s)
+⚠ [8058/8079] Built CutAlg (3.9s)
+warning: CutAlg.lean:66:17: This simp argument is unused:
+  hsx
+
+Hint: Omit it from the simp argument list.
+  simp ̵[̵h̵s̵x̵]̵
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+✔ [8060/8079] Built DerivCanon (2.8s)
+✔ [8062/8079] Built ClsBound (2.8s)
+✔ [8064/8079] Built ClosureSpan (2.8s)
+✔ [8066/8079] Built SatPool (2.0s)
+✔ [8068/8079] Built SatCases (2.9s)
+✔ [8070/8079] Built ChainPool (2.0s)
+✔ [8072/8079] Built SatSeq (2.9s)
+✔ [8074/8079] Built SatMain (2.9s)
+✔ [8076/8079] Built ClosureSat (2.6s)
+⚠ [8078/8079] Built Bounds (2.6s)
+warning: Bounds.lean:85:8: declaration uses `sorry`
+warning: Bounds.lean:91:8: declaration uses `sorry`
+Build completed successfully (8079 jobs).

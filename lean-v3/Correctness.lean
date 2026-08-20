@@ -17,39 +17,28 @@ Two groups of contracts, both against the denotation `lang` in
    v2-style proof be replayed over the smart-constructor-routed engine, and
    they are the semantic side of the ACI story that `Bounds.lean` counts.
 
-## Status of the statements as originally written
+All statements are proved unconditionally.
 
-Everything that is true as stated is proved below.  Six of the statements are
-**refuted** as stated, all for one and the same reason, which is a property of
-the *fixed* definitions in `Core.lean` and not of the proofs:
+## Provenance of the hom invariant
 
-* `invHom_ h r` replaces the association list `h` by `homNorm h` (identity
-  entries dropped, then sorted and deduplicated), while `applyHom` resolves a
-  key by **first hit wins**.  For an `h` with *duplicate keys* those two
-  disagree, e.g. for
+An earlier version of `invHom_`/`homNorm` dropped identity entries from the
+association list *before* restoring the "unique keys" invariant that the
+Haskell original inherits from `Map Char String`.  Since `applyHom` resolves a
+key by **first hit wins**, that was unsound on lists with duplicate keys: for
 
-  ```
-  h₀ = [('a', ['a']), ('a', [])] ,  applyHom h₀ = fun c => [c] ,
-  homNorm h₀ = [('a', [])]       ,  applyHom (homNorm h₀) 'a' = [] .
-  ```
+```
+h₀ = [('a', ['a']), ('a', [])] ,  applyHom h₀ = fun c => [c] ,
+oldHomNorm h₀ = [('a', [])]    ,  applyHom (oldHomNorm h₀) 'a' = [] ,
+```
 
-  `Core.lean` calls duplicate keys "the caller's mistake and merely
-  tolerated", so this is a genuine gap between the smart constructor and the
-  unguarded contract, not a repairable proof.
-
-The affected statements — `lang_derivW`, `lang_deriv`, `deriv_correct`,
-`matchRE_correct`, `lang_invHom_`, `canon_correct` — are kept verbatim but
-commented out, each accompanied by
-
-* a **formal refutation** (`not_lang_derivW`, …), i.e. a proof of the negation
-  of the statement as written, all using the single witness `r₀` below, and
-* a **corrected version** carrying the side condition `HomsStable`
-  (`Engine.lean`): every `invHom` node of the term denotes the same
-  homomorphism before and after `homNorm`.  The condition is automatic for
-  terms without `invHom` nodes, for every association list with pairwise
-  distinct keys (`HomWF.homStable`), and for everything the engine itself
-  builds (`homNorm` is idempotent), so the corrected statements cover every
-  intended use.
+the regex `h₀⁻¹([a])` (language `{"a"}`) stepped to a state accepting `"a"`
+again, refuting `lang_derivW`, `lang_deriv`, `deriv_correct`,
+`matchRE_correct`, `lang_invHom_` and `canon_correct` as stated.  That
+counterexample is what motivated the current normal form, which deduplicates
+by key (keeping the first binding) before filtering, and hence preserves the
+denoted homomorphism pointwise (`homNorm_applyHom`).  With the invariant
+restored, all six statements hold with no side condition, and the refutations
+and their `HomsStable`-guarded repairs have been removed.
 -/
 
 open Language Computability
@@ -62,22 +51,39 @@ theorem nullable_correct (r : RE) :
     nullable r = true ↔ ([] : List Char) ∈ lang r :=
   nullable_iff r
 
-/-! #### The counterexample witness
+/-- The word derivative of the engine denotes the left quotient. -/
+theorem lang_derivW (u : List Char) (r : RE) :
+    lang (derivW u r) = _root_.derivW u (lang r) :=
+  lang_derivW_eq u r
 
-`h₀` denotes the identity homomorphism (`applyHom` takes the *first* hit,
-`('a', ['a'])`), but `homNorm h₀` deletes that entry as an identity entry and
-so exposes `('a', [])`: after normalisation `'a'` is erased.  `r₀` is the
-regex `h₀⁻¹([a])`, whose language is `{"a"}`. -/
+theorem lang_deriv (c : Char) (r : RE) :
+    lang (deriv c r) = deriv1 c (lang r) :=
+  lang_deriv_eq c r
 
-/-- An association list with duplicate keys: `applyHom` is the identity, its
-`homNorm` is not. -/
+theorem deriv_correct (c : Char) (r : RE) (w : List Char) :
+    w ∈ lang (deriv c r) ↔ (c :: w) ∈ lang r := by
+  rw [lang_deriv_eq c r]
+  exact Iff.rfl
+
+theorem matchRE_correct (r : RE) (s : List Char) :
+    matchRE r s = true ↔ s ∈ lang r :=
+  matchRE_iff r s
+
+/-! ### Regression test: the duplicate-key witness
+
+`h₀` is the association list from the counterexample that refuted the
+statements above under the old normal form: `applyHom h₀` is the identity
+(first hit wins, `('a', ['a'])`), while filtering identity entries *before*
+deduplicating by key exposed the shadowed `('a', [])` and erased `'a'`.  With
+the dedup-by-key step in place, `homNorm h₀` is empty and `invHom_ h₀`
+collapses to its body, as it must. -/
+
+/-- The duplicate-key association list of the historical counterexample; it
+denotes the identity homomorphism. -/
 def h₀ : List (Char × List Char) := [('a', ['a']), ('a', [])]
 
-/-- The refutation witness: `h₀⁻¹([a])`, a regex whose language is `{"a"}`. -/
+/-- The historical counterexample witness: `h₀⁻¹([a])`, of language `{"a"}`. -/
 def r₀ : RE := .invHom h₀ (.sym (.pos {'a'}))
-
-/-- The engine state reached from `r₀` after reading `"a"`. -/
-def d₀ : RE := .invHom [('a', ([] : List Char))] .eps
 
 theorem applyHom_h₀ (c : Char) : applyHom h₀ c = [c] := by
   unfold applyHom h₀
@@ -86,13 +92,14 @@ theorem applyHom_h₀ (c : Char) : applyHom h₀ c = [c] := by
   · rw [show (List.find? (fun p => p.1 == c) [('a', ['a']), ('a', [])]) = none from by
       simp [List.find?, show ('a' == c) = false from by simpa using Ne.symm h]]
 
-theorem homNorm_h₀ : homNorm h₀ = [('a', ([] : List Char))] := by
-  simp [homNorm, h₀]
+theorem homNorm_h₀ : homNorm h₀ = [] := by
+  rw [homNorm, h₀, homDedupKeys]
+  simp [homDedupKeys]
 
-theorem invHom_smart_h₀ {r : RE} (hr : r ≠ .nil) :
-    invHom_ h₀ r = .invHom [('a', ([] : List Char))] r := by
-  rw [invHom_eq_ite]
-  simp [hr, homNorm_h₀]
+/-- Normalisation now keeps `h₀` an identity homomorphism, so the smart
+constructor discards the node entirely. -/
+theorem invHom_smart_h₀ {r : RE} (hr : r ≠ .nil) : invHom_ h₀ r = r := by
+  rw [invHom_eq_ite, if_neg hr, if_pos homNorm_h₀]
 
 /-- `lang r₀ = {"a"}`. -/
 theorem mem_lang_r₀ (w : List Char) : w ∈ lang r₀ ↔ w = ['a'] := by
@@ -106,126 +113,13 @@ theorem mem_lang_r₀ (w : List Char) : w ∈ lang r₀ ↔ w = ['a'] := by
   · rintro rfl
     exact ⟨'a', by simp [inCls], rfl⟩
 
-/-- After `homNorm`, the letter `'a'` is erased, so `"a"` *is* in the language
-of the derived state `d₀`. -/
-theorem mem_lang_d₀ : ['a'] ∈ lang d₀ := by
-  show (['a'] : List Char).flatMap (applyHom [('a', ([] : List Char))]) ∈ lang RE.eps
-  simp [applyHom, Smart.mem_lang_eps]
+theorem matchRE_r₀_a : matchRE r₀ ['a'] = true :=
+  (matchRE_correct r₀ ['a']).mpr ((mem_lang_r₀ ['a']).mpr rfl)
 
-/-- One step of the engine from `r₀` lands in `d₀`. -/
-theorem deriv_r₀ : deriv 'a' r₀ = d₀ := by
-  show invHom_ h₀ (derivW (applyHom h₀ 'a') (RE.sym (.pos {'a'}))) = d₀
-  rw [applyHom_h₀, show derivW ['a'] (RE.sym (.pos {'a'})) = RE.eps from by
-    rw [derivW]; simp [inCls]]
-  exact invHom_smart_h₀ (by simp)
-
-theorem derivW_r₀ : derivW ['a'] r₀ = d₀ := by
-  rw [show r₀ = RE.invHom h₀ (.sym (.pos {'a'})) from rfl, derivW]
-  rw [show (['a'] : List Char).flatMap (applyHom h₀) = ['a'] from by
-      simp [applyHom_h₀],
-    show derivW ['a'] (RE.sym (.pos {'a'})) = RE.eps from by rw [derivW]; simp [inCls]]
-  exact invHom_smart_h₀ (by simp)
-
-/-! #### `lang_derivW` -/
-
-/-
-theorem lang_derivW (u : List Char) (r : RE) :
-    lang (derivW u r) = _root_.derivW u (lang r) := by
-  sorry
--/
--- REFUTED as stated (duplicate keys in the association list of an `invHom`
--- node; see the module docstring).  Corrected form: `lang_derivW_of_stable`.
-
-theorem not_lang_derivW :
-    ¬ ∀ (u : List Char) (r : RE), lang (derivW u r) = _root_.derivW u (lang r) := by
-  intro h
-  have := h ['a'] r₀
-  rw [derivW_r₀] at this
-  have hmem : (['a'] : List Char) ∈ _root_.derivW ['a'] (lang r₀) := this ▸ mem_lang_d₀
-  rw [mem_derivW, mem_lang_r₀] at hmem
-  simp at hmem
-
-/-- The corrected `lang_derivW`: the word derivative of the engine denotes the
-left quotient, for every term whose `invHom` nodes survive `homNorm`. -/
-theorem lang_derivW_of_homsStable (u : List Char) (r : RE) (h : HomsStable r) :
-    lang (derivW u r) = _root_.derivW u (lang r) :=
-  lang_derivW_of_stable u r h
-
-/-! #### `lang_deriv` -/
-
-/-
-theorem lang_deriv (c : Char) (r : RE) :
-    lang (deriv c r) = deriv1 c (lang r) := by
-  sorry
--/
--- REFUTED as stated; corrected form: `lang_deriv_of_homsStable`.
-
-theorem not_lang_deriv :
-    ¬ ∀ (c : Char) (r : RE), lang (deriv c r) = deriv1 c (lang r) := by
-  intro h
-  have := h 'a' r₀
-  rw [deriv_r₀] at this
-  have hmem : (['a'] : List Char) ∈ deriv1 'a' (lang r₀) := this ▸ mem_lang_d₀
-  have : (['a', 'a'] : List Char) ∈ lang r₀ := hmem
-  rw [mem_lang_r₀] at this
-  simp at this
-
-theorem lang_deriv_of_homsStable (c : Char) (r : RE) (h : HomsStable r) :
-    lang (deriv c r) = deriv1 c (lang r) :=
-  lang_deriv_of_stable c r h
-
-/-! #### `deriv_correct` -/
-
-/-
-theorem deriv_correct (c : Char) (r : RE) (w : List Char) :
-    w ∈ lang (deriv c r) ↔ (c :: w) ∈ lang r := by
-  sorry
--/
--- REFUTED as stated; corrected form: `deriv_correct_of_homsStable`.
-
-theorem not_deriv_correct :
-    ¬ ∀ (c : Char) (r : RE) (w : List Char),
-      w ∈ lang (deriv c r) ↔ (c :: w) ∈ lang r := by
-  intro h
-  have hmem := (h 'a' r₀ ['a']).mp (by rw [deriv_r₀]; exact mem_lang_d₀)
-  rw [mem_lang_r₀] at hmem
-  simp at hmem
-
-theorem deriv_correct_of_homsStable (c : Char) (r : RE) (w : List Char)
-    (h : HomsStable r) : w ∈ lang (deriv c r) ↔ (c :: w) ∈ lang r := by
-  rw [lang_deriv_of_stable c r h]
-  exact Iff.rfl
-
-/-! #### `matchRE_correct` -/
-
-/-
-theorem matchRE_correct (r : RE) (s : List Char) :
-    matchRE r s = true ↔ s ∈ lang r := by
-  sorry
--/
--- REFUTED as stated; corrected form: `matchRE_correct_of_homsStable`.
-
-theorem matchRE_r₀ : matchRE r₀ ['a', 'a'] = true := by
-  show nullable (deriv 'a' (deriv 'a' r₀)) = true
-  rw [deriv_r₀]
-  show nullable (invHom_ [('a', ([] : List Char))]
-    (derivW (applyHom [('a', ([] : List Char))] 'a') RE.eps)) = true
-  rw [show applyHom [('a', ([] : List Char))] 'a' = [] from rfl,
-    show Redgrep.derivW ([] : List Char) RE.eps = RE.eps from by rw [Redgrep.derivW]]
-  rw [invHom_eq_ite,
-    show homNorm [('a', ([] : List Char))] = [('a', ([] : List Char))] from by simp [homNorm]]
-  simp [nullable]
-
-theorem not_matchRE_correct :
-    ¬ ∀ (r : RE) (s : List Char), matchRE r s = true ↔ s ∈ lang r := by
-  intro h
-  have hmem := (h r₀ ['a', 'a']).mp matchRE_r₀
-  rw [mem_lang_r₀] at hmem
-  simp at hmem
-
-theorem matchRE_correct_of_homsStable (r : RE) (s : List Char) (h : HomsStable r) :
-    matchRE r s = true ↔ s ∈ lang r :=
-  matchRE_of_stable r s h
+/-- The engine no longer accepts `"aa"`: the unsoundness is gone. -/
+theorem matchRE_r₀_aa : matchRE r₀ ['a', 'a'] = false := by
+  rw [Bool.eq_false_iff, ne_eq, matchRE_correct, mem_lang_r₀]
+  simp
 
 /-! ### Group 2: the canonicalisation contract
 
@@ -266,96 +160,42 @@ theorem lang_not_ (r : RE) : lang (not_ r) = (lang r)ᶜ :=
 
 /-! #### `lang_invHom_` -/
 
-/-
+/-- The smart inverse homomorphism denotes the inverse image of the
+homomorphism its association list denotes: normalisation is meaning-preserving
+(`homNorm_applyHom`). -/
 theorem lang_invHom_ (h : List (Char × List Char)) (r : RE) :
-    lang (invHom_ h r) = _root_.invHom (applyHom h) (lang r) := by
-  sorry
--/
--- REFUTED as stated; corrected form: `lang_smart_invHom_of_stable` (and
--- `lang_invHom_of_homWF`, the same statement for association lists with
--- pairwise distinct keys).
-
-theorem not_lang_invHom_ :
-    ¬ ∀ (h : List (Char × List Char)) (r : RE),
-      lang (invHom_ h r) = _root_.invHom (applyHom h) (lang r) := by
-  intro hyp
-  have h1 : (['a'] : List Char) ∈ _root_.invHom (applyHom h₀) (lang (RE.sym (.pos {'a'}))) := by
-    show (['a'] : List Char).flatMap (applyHom h₀) ∈ lang (RE.sym (.pos {'a'}))
-    rw [show (['a'] : List Char).flatMap (applyHom h₀) = ['a'] from by simp [applyHom_h₀]]
-    exact ⟨'a', by simp [inCls], rfl⟩
-  rw [← hyp h₀ (RE.sym (.pos {'a'})), invHom_smart_h₀ (by simp)] at h1
-  have : (['a'] : List Char).flatMap (applyHom [('a', ([] : List Char))]) ∈
-      lang (RE.sym (.pos {'a'})) := h1
-  rw [show (['a'] : List Char).flatMap (applyHom [('a', ([] : List Char))]) = [] from rfl] at this
-  obtain ⟨c, -, hc⟩ := this
-  simp at hc
-
-/-- The corrected `lang_invHom_`, under the stability side condition. -/
-theorem lang_smart_invHom_of_stable {h : List (Char × List Char)} (hst : HomStable h) (r : RE) :
     lang (invHom_ h r) = _root_.invHom (applyHom h) (lang r) :=
-  lang_invHom_of_stable hst r
-
-/-- The corrected `lang_invHom_` for the intended usage: association lists
-with pairwise distinct keys. -/
-theorem lang_invHom_of_homWF {h : List (Char × List Char)} (hwf : HomWF h) (r : RE) :
-    lang (invHom_ h r) = _root_.invHom (applyHom h) (lang r) :=
-  lang_invHom_of_stable hwf.homStable r
+  lang_invHom_smart h r
 
 /-! #### `canon_correct` -/
 
-/-
 /-- `canon` is language-preserving: canonicalisation is free, semantically. -/
 theorem canon_correct (r : RE) : lang (canon r) = lang r := by
-  sorry
--/
--- REFUTED as stated; corrected form: `canon_correct_of_homsStable`.
-
-theorem canon_r₀ : canon r₀ = .invHom [('a', ([] : List Char))] (.sym (.pos {'a'})) := by
-  show invHom_ h₀ (canon (RE.sym (.pos {'a'}))) = _
-  rw [show canon (RE.sym (.pos {'a'})) = RE.sym (.pos {'a'}) from by
-    show sym (Cls.pos {'a'}) = _
-    rw [Smart.sym_def]
-    simp [Cls.isEmpty, Cls.norm, Cls.isFull, charCount]]
-  exact invHom_smart_h₀ (by simp)
-
-theorem not_canon_correct : ¬ ∀ (r : RE), lang (canon r) = lang r := by
-  intro h
-  have h1 : (['a'] : List Char) ∈ lang r₀ := (mem_lang_r₀ ['a']).mpr rfl
-  rw [← h r₀, canon_r₀] at h1
-  have : (['a'] : List Char).flatMap (applyHom [('a', ([] : List Char))]) ∈
-      lang (RE.sym (.pos {'a'})) := h1
-  rw [show (['a'] : List Char).flatMap (applyHom [('a', ([] : List Char))]) = [] from rfl] at this
-  obtain ⟨c, -, hc⟩ := this
-  simp at hc
-
-/-- The corrected `canon_correct`: canonicalisation is semantically free for
-every term whose `invHom` nodes survive `homNorm`. -/
-theorem canon_correct_of_homsStable (r : RE) (h : HomsStable r) : lang (canon r) = lang r := by
   induction r with
   | sym cl => exact Smart.lang_smart_sym cl
   | alt a b iha ihb =>
     show lang (alt2 (canon a) (canon b)) = _
-    rw [Smart.lang_alt2, iha h.1, ihb h.2]
+    rw [Smart.lang_alt2, iha, ihb]
     rfl
   | cut a b iha ihb =>
     show lang (cut2 (canon a) (canon b)) = _
-    rw [Smart.lang_cut2, iha h.1, ihb h.2]
+    rw [Smart.lang_cut2, iha, ihb]
     rfl
   | seq a b iha ihb =>
     show lang (seq2 (canon a) (canon b)) = _
-    rw [Smart.lang_seq2, iha h.1, ihb h.2]
+    rw [Smart.lang_seq2, iha, ihb]
     rfl
   | rep a ih =>
     show lang (rep_ (canon a)) = _
-    rw [Smart.lang_rep_, ih h]
+    rw [Smart.lang_rep_, ih]
     rfl
   | not a ih =>
     show lang (not_ (canon a)) = _
-    rw [Smart.lang_not_, ih h]
+    rw [Smart.lang_not_, ih]
     rfl
   | invHom hh a ih =>
     show lang (invHom_ hh (canon a)) = _
-    rw [lang_invHom_of_stable h.1, ih h.2]
+    rw [lang_invHom_smart, ih]
     rfl
   | eps => rfl
   | nil => rfl

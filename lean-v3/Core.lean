@@ -42,8 +42,13 @@ Deliberate deviations from the task spec / v2, mirroring the Haskell side:
   `List (Char × List Char)` (Haskell: `Map Char String`), **not** a function
   `Char → List Char` — a function field would destroy the derived
   `DecidableEq`, which the closure-cardinality programme needs.  Characters
-  absent from the list map to themselves (`applyHom`); `invHom_` drops
-  identity entries and keeps the list sorted, mirroring Haskell `invHom`.
+  absent from the list map to themselves (`applyHom`); `invHom_` normalises
+  the list (`homNorm`), mirroring Haskell `invHom`.  Since `applyHom` resolves
+  a key by *first hit wins* while the Haskell original works with a `Map`
+  whose keys are unique by construction, normalisation first deduplicates by
+  key (keeping the first binding) and only then drops identity entries, sorts
+  and dedups; that is exactly what makes it meaning-preserving
+  (`homNorm_applyHom`).
 * `Machine` (embedded DFA nodes) is still TODO in v3; the planned sharp bound
   for it is recorded in `Bounds.lean`.
 -/
@@ -298,17 +303,51 @@ def not_ : RE → RE
 /-- `r?` -/
 def opt (r : RE) : RE := alt2 .eps r
 
-/-- Smart inverse homomorphism (Haskell `invHom`): `nil` collapses, identity
-entries are dropped, the association list is kept sorted and duplicate-free
-(the canonical form of the hom itself); an emptied map collapses to the bare
-regex.  Duplicate *keys* with different images are the caller's mistake and
-merely tolerated (first hit wins in `applyHom`). -/
+/-- Deduplicate an association list **by key**, keeping the FIRST binding for
+each key — exactly the one `applyHom` resolves to.  This restores, on the
+association-list representation, the "keys are unique" invariant that the
+Haskell original gets for free from `Map Char String`; without it, dropping an
+identity entry could expose a shadowed later binding and change the denoted
+homomorphism. -/
+def homDedupKeys : List (Char × List Char) → List (Char × List Char)
+  | [] => []
+  | p :: ps => p :: homDedupKeys (ps.filter fun q => q.1 != p.1)
+termination_by l => l.length
+decreasing_by
+  simp only [List.length_cons, List.length_unattach]
+  exact Nat.lt_succ_of_le ((List.length_filter_le _ _).trans (by simp))
+
+/-- The canonical form of a hom association list: first deduplicate by key
+(so that later, shadowed bindings can never resurface), then drop identity
+entries, then sort and remove duplicate pairs.  Normalisation preserves the
+denoted homomorphism pointwise (`homNorm_applyHom` in `REOrder.lean`). -/
+def homNorm (h : List (Char × List Char)) : List (Char × List Char) :=
+  (((homDedupKeys h).filter fun p => p.2 != [p.1]).mergeSort
+    fun a b => (RE.cmpHomEntry a b).isLE).dedup
+
+/-- Smart inverse homomorphism (Haskell `invHom`): `nil` collapses, the
+association list is replaced by its canonical form `homNorm` (deduplicated by
+key, identity entries dropped, sorted and duplicate-free); an emptied map
+collapses to the bare regex. -/
 def invHom_ (h : List (Char × List Char)) : RE → RE
   | .nil => .nil
-  | r =>
-    let h' := ((h.filter fun p => p.2 != [p.1]).mergeSort
-      fun a b => (RE.cmpHomEntry a b).isLE).dedup
-    if h' = [] then r else .invHom h' r
+  | r => if homNorm h = [] then r else .invHom (homNorm h) r
+
+theorem homDedupKeys_sublist :
+    ∀ l : List (Char × List Char), List.Sublist (homDedupKeys l) l
+  | [] => by rw [homDedupKeys]
+  | p :: ps => by
+    rw [homDedupKeys]
+    exact List.Sublist.cons₂ p
+      ((homDedupKeys_sublist (ps.filter fun q => q.1 != p.1)).trans List.filter_sublist)
+termination_by l => l.length
+decreasing_by
+  simp only [List.length_cons]
+  exact Nat.lt_succ_of_le (List.length_filter_le _ _)
+
+theorem homNorm_subperm (h : List (Char × List Char)) : (homNorm h).Subperm h :=
+  (((List.dedup_sublist _).subperm.trans (List.mergeSort_perm _ _).subperm).trans
+    List.filter_sublist.subperm).trans (homDedupKeys_sublist h).subperm
 
 /-! ### The engine -/
 
